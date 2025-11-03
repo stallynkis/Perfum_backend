@@ -15,12 +15,12 @@ return new class extends Migration
             $table->id();
             $table->string('name');
             $table->text('description')->nullable();
-            $table->decimal('price', 10, 2);
+            $table->decimal('price', 10, 2)->default(0);
             $table->integer('stock')->default(0);
-            $table->string('category');
+            $table->string('category')->default('general');
             $table->string('brand')->nullable();
             $table->string('image')->nullable();
-            $table->decimal('rating', 2, 1)->default(4.5);
+            $table->decimal('rating', 3, 1)->default(4.5);
             $table->decimal('original_price', 10, 2)->nullable();
             $table->json('notes')->nullable(); // Para las notas como array
             $table->boolean('is_active')->default(true);

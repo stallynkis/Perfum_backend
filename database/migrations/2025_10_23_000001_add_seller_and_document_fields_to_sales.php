@@ -13,13 +13,15 @@ return new class extends Migration
     {
         Schema::table('sales', function (Blueprint $table) {
             // Agregar seller_id para identificar al vendedor
-            $table->foreignId('seller_id')->nullable()->after('user_id')->constrained('users')->onDelete('set null');
+            $table->unsignedBigInteger('seller_id')->nullable()->after('user_id');
             
             // Agregar campos para comprobante
             $table->string('document_type')->nullable()->after('payment_method'); // ticket, boleta, factura
             $table->string('customer_name')->nullable()->after('document_type');
             $table->string('customer_document')->nullable()->after('customer_name');
             $table->string('customer_address')->nullable()->after('customer_document');
+            
+            $table->foreign('seller_id')->references('id')->on('users')->onDelete('set null');
         });
     }
 

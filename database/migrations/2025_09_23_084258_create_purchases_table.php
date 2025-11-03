@@ -13,15 +13,17 @@ return new class extends Migration
     {
         Schema::create('purchases', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('product_id')->constrained()->onDelete('cascade');
-            $table->integer('quantity');
-            $table->decimal('unit_cost', 10, 2);
-            $table->decimal('total_cost', 10, 2);
+            $table->unsignedBigInteger('product_id');
+            $table->integer('quantity')->default(1);
+            $table->decimal('unit_cost', 10, 2)->default(0);
+            $table->decimal('total_cost', 10, 2)->default(0);
             $table->string('supplier')->nullable();
             $table->string('invoice_number')->nullable();
             $table->text('notes')->nullable();
             $table->date('purchase_date');
             $table->timestamps();
+            
+            $table->foreign('product_id')->references('id')->on('products')->onDelete('cascade');
         });
     }
 

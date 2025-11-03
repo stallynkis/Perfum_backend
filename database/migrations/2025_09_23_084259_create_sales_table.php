@@ -13,16 +13,19 @@ return new class extends Migration
     {
         Schema::create('sales', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('product_id')->constrained()->onDelete('cascade');
-            $table->foreignId('user_id')->nullable()->constrained()->onDelete('set null');
-            $table->integer('quantity');
-            $table->decimal('unit_price', 10, 2);
-            $table->decimal('total_amount', 10, 2);
+            $table->unsignedBigInteger('product_id');
+            $table->unsignedBigInteger('user_id')->nullable();
+            $table->integer('quantity')->default(1);
+            $table->decimal('unit_price', 10, 2)->default(0);
+            $table->decimal('total_amount', 10, 2)->default(0);
             $table->string('payment_method')->nullable(); // efectivo, tarjeta, yape, etc.
             $table->string('status')->default('completed'); // completed, pending, cancelled
             $table->text('notes')->nullable();
             $table->date('sale_date');
             $table->timestamps();
+            
+            $table->foreign('product_id')->references('id')->on('products')->onDelete('cascade');
+            $table->foreign('user_id')->references('id')->on('users')->onDelete('set null');
         });
     }
 

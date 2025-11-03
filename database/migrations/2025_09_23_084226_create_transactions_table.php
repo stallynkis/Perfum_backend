@@ -13,10 +13,10 @@ return new class extends Migration
     {
         Schema::create('transactions', function (Blueprint $table) {
             $table->id();
-            $table->enum('type', ['income', 'expense']); // ingreso o egreso
+            $table->enum('type', ['income', 'expense'])->default('income'); // ingreso o egreso
             $table->string('category'); // categoria (venta, compra, gasto operativo, etc.)
             $table->string('description');
-            $table->decimal('amount', 10, 2);
+            $table->decimal('amount', 10, 2)->default(0);
             $table->string('reference_type')->nullable(); // sale, purchase, other
             $table->unsignedBigInteger('reference_id')->nullable(); // ID de venta/compra relacionada
             $table->string('payment_method')->nullable(); // efectivo, tarjeta, transferencia
