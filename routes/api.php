@@ -6,6 +6,7 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ContactController;
 use App\Http\Controllers\ContactInfoController;
+use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\Api\TransactionController;
 use App\Http\Controllers\Api\PurchaseController;
 use App\Http\Controllers\Api\SaleController;
@@ -57,3 +58,18 @@ Route::middleware('auth:sanctum')->group(function () {
 
 // Ruta pública para consultar DNI en RENIEC
 Route::get('/reniec/consultar/{dni}', [ReniecController::class, 'consultarDNI']);
+
+// Rutas de Notificaciones (protegidas con auth:sanctum)
+Route::middleware('auth:sanctum')->group(function () {
+    Route::get('/notifications', [NotificationController::class, 'index']);
+    Route::get('/notifications/stats', [NotificationController::class, 'stats']);
+    Route::get('/notifications/unread-count', [NotificationController::class, 'unreadCount']);
+    Route::post('/notifications', [NotificationController::class, 'store']);
+    Route::get('/notifications/{id}', [NotificationController::class, 'show']);
+    Route::put('/notifications/{id}/read', [NotificationController::class, 'markAsRead']);
+    Route::put('/notifications/{id}/unread', [NotificationController::class, 'markAsUnread']);
+    Route::put('/notifications/mark-all-read', [NotificationController::class, 'markAllAsRead']);
+    Route::delete('/notifications/{id}', [NotificationController::class, 'destroy']);
+    Route::delete('/notifications/clear/read', [NotificationController::class, 'clearRead']);
+    Route::delete('/notifications/clear/all', [NotificationController::class, 'clearAll']);
+});
