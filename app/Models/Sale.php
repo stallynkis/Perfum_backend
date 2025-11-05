@@ -7,6 +7,9 @@ use Illuminate\Database\Eloquent\Model;
 class Sale extends Model
 {
     protected $fillable = [
+        'register_id',
+        'cash_session_id',
+        'type',
         'product_id',
         'user_id',
         'seller_id',
@@ -18,15 +21,23 @@ class Sale extends Model
         'customer_name',
         'customer_document',
         'customer_address',
+        'reference_id',
+        'reference_type',
         'status',
         'notes',
-        'sale_date'
+        'sale_date',
+        'description'
     ];
 
     protected $casts = [
         'unit_price' => 'decimal:2',
         'total_amount' => 'decimal:2',
         'sale_date' => 'date',
+        'register_id' => 'integer',
+        'cash_session_id' => 'integer',
+        'seller_id' => 'integer',
+        'user_id' => 'integer',
+        'reference_id' => 'integer',
     ];
 
     // Relaciones

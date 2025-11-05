@@ -52,16 +52,22 @@ class SaleController extends Controller
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
+            'register_id' => 'nullable|integer',
+            'cash_session_id' => 'nullable|integer',
+            'type' => 'nullable|string|in:sale,expense,income,withdrawal',
             'product_id' => 'required|exists:products,id',
             'user_id' => 'nullable|exists:users,id',
             'seller_id' => 'nullable|exists:users,id',
             'quantity' => 'required|integer|min:1',
             'unit_price' => 'required|numeric|min:0',
-            'payment_method' => 'nullable|string|max:255',
+            'payment_method' => 'nullable|string|in:cash,card,yape,plin,transfer,mixed',
             'document_type' => 'nullable|string|in:ticket,boleta,factura',
             'customer_name' => 'nullable|string|max:255',
             'customer_document' => 'nullable|string|max:20',
             'customer_address' => 'nullable|string|max:500',
+            'reference_id' => 'nullable|integer',
+            'reference_type' => 'nullable|string|max:255',
+            'description' => 'nullable|string|max:500',
             'status' => 'sometimes|in:completed,pending,cancelled',
             'notes' => 'nullable|string',
             'sale_date' => 'required|date'
@@ -76,6 +82,14 @@ class SaleController extends Controller
             ], 400);
         }
 
+        // Si customer_document es '1' o vacío, se considera "Clientes Varios"
+        if (empty($validated['customer_document']) || $validated['customer_document'] === '1') {
+            $validated['customer_name'] = 'Clientes Varios';
+            $validated['customer_document'] = null;
+        }
+        
+        // Establecer valores por defecto
+        $validated['type'] = $validated['type'] ?? 'sale';
         $validated['total_amount'] = $validated['quantity'] * $validated['unit_price'];
         $validated['status'] = $validated['status'] ?? 'completed';
 
