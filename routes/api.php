@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\TransactionController;
 use App\Http\Controllers\Api\PurchaseController;
 use App\Http\Controllers\Api\SaleController;
 use App\Http\Controllers\Api\UserController;
+use App\Http\Controllers\Api\ReniecController;
 
 Route::get('/health', function () {
     return response()->json(['status' => 'OK', 'timestamp' => now()]);
@@ -53,3 +54,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/contact-info', [ContactInfoController::class, 'update']);
     Route::get('/contact-info/history', [ContactInfoController::class, 'history']);
 });
+
+// Ruta pública para consultar DNI en RENIEC
+Route::get('/reniec/consultar/{dni}', [ReniecController::class, 'consultarDNI']);
