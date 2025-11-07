@@ -17,7 +17,8 @@ class Product extends Model
         'rating',
         'original_price',
         'notes',
-        'is_active'
+        'is_active',
+        'is_featured'
     ];
 
     protected $casts = [
@@ -26,6 +27,7 @@ class Product extends Model
         'rating' => 'decimal:1',
         'notes' => 'array',
         'is_active' => 'boolean',
+        'is_featured' => 'boolean',
     ];
 
     // Relaciones

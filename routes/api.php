@@ -12,6 +12,7 @@ use App\Http\Controllers\Api\PurchaseController;
 use App\Http\Controllers\Api\SaleController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\ReniecController;
+use App\Http\Controllers\Api\OrderController;
 
 Route::get('/health', function () {
     return response()->json(['status' => 'OK', 'timestamp' => now()]);
@@ -31,6 +32,10 @@ Route::middleware('auth:sanctum')->group(function () {
 Route::get('/products', [ProductController::class, 'index']);
 Route::get('/products/{product}', [ProductController::class, 'show']);
 
+// Orders - Public routes
+Route::post('/orders', [OrderController::class, 'store']); // Create order (public)
+Route::get('/orders/stats', [OrderController::class, 'stats']); // Stats (public for now)
+
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/products', [ProductController::class, 'store']);
     Route::put('/products/{product}', [ProductController::class, 'update']);
@@ -46,6 +51,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('/purchases', PurchaseController::class);
 
     Route::apiResource('/sales', SaleController::class);
+    
+    // Orders - Protected routes
+    Route::get('/orders', [OrderController::class, 'index']);
+    Route::get('/orders/{id}', [OrderController::class, 'show']);
+    Route::put('/orders/{id}', [OrderController::class, 'update']);
+    Route::post('/orders/{id}/confirm-payment', [OrderController::class, 'confirmPayment']);
+    Route::delete('/orders/{id}', [OrderController::class, 'destroy']);
 });
 
 Route::post('/contact', [ContactController::class, 'store']);

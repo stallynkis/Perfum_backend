@@ -24,7 +24,7 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         // Registrar observers
-        Order::observe(OrderObserver::class);
-        ContactForm::observe(ContactFormObserver::class);
+        // Order::observe(OrderObserver::class); // Comentado temporalmente - modelo no existe
+        // ContactForm::observe(ContactFormObserver::class); // Comentado temporalmente - modelo no existe
     }
 }
