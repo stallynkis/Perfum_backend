@@ -13,6 +13,13 @@ use App\Http\Controllers\Api\SaleController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\ReniecController;
 use App\Http\Controllers\Api\OrderController;
+use App\Http\Controllers\Admin\CategoryController;
+use App\Http\Controllers\Admin\BenefitController;
+use App\Http\Controllers\Admin\SlideController;
+use App\Http\Controllers\Admin\UserManagementController;
+use App\Http\Controllers\Admin\ProductManagementController;
+use App\Http\Controllers\Admin\StatsController;
+use App\Http\Controllers\User\DeliveryPreferencesController;
 
 Route::get('/health', function () {
     return response()->json(['status' => 'OK', 'timestamp' => now()]);
@@ -33,8 +40,8 @@ Route::get('/products', [ProductController::class, 'index']);
 Route::get('/products/{product}', [ProductController::class, 'show']);
 
 // Orders - Public routes
-Route::post('/orders', [OrderController::class, 'store']); // Create order (public)
-Route::get('/orders/stats', [OrderController::class, 'stats']); // Stats (public for now)
+Route::post('/orders', [OrderController::class, 'store']);
+Route::get('/orders/stats', [OrderController::class, 'stats']);
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/products', [ProductController::class, 'store']);
@@ -84,4 +91,20 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/notifications/{id}', [NotificationController::class, 'destroy']);
     Route::delete('/notifications/clear/read', [NotificationController::class, 'clearRead']);
     Route::delete('/notifications/clear/all', [NotificationController::class, 'clearAll']);
+});
+
+// Rutas de Admin (protegidas con auth:sanctum)
+Route::middleware('auth:sanctum')->prefix('admin')->group(function () {
+    Route::apiResource('users', UserManagementController::class);
+    Route::apiResource('categories', CategoryController::class);
+    Route::apiResource('benefits', BenefitController::class);
+    Route::apiResource('slides', SlideController::class);
+    Route::get('stats', [StatsController::class, 'index']);
+});
+
+// Rutas de preferencias de usuario
+Route::middleware('auth:sanctum')->prefix('user')->group(function () {
+    Route::get('delivery-preferences', [DeliveryPreferencesController::class, 'show']);
+    Route::post('delivery-preferences', [DeliveryPreferencesController::class, 'store']);
+    Route::delete('delivery-preferences', [DeliveryPreferencesController::class, 'destroy']);
 });
