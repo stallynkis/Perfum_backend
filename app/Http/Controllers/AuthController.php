@@ -39,12 +39,23 @@ class AuthController extends Controller
             'name' => 'required|string|max:255',
             'email' => 'required|string|email|max:255|unique:users',
             'password' => 'required|string|min:8|confirmed',
+            'phone' => 'nullable|string|max:20',
+            'address' => 'nullable|string|max:255',
+            'city' => 'nullable|string|max:100',
+            'document_type' => 'nullable|string|max:50',
+            'document_number' => 'nullable|string|max:50',
+            'birth_date' => 'nullable|date',
         ]);
 
         $user = User::create([
             'name' => $request->name,
             'email' => $request->email,
             'password' => Hash::make($request->password),
+            'phone' => $request->phone,
+            'address' => $request->address,
+            'document_type' => $request->document_type,
+            'document_number' => $request->document_number,
+            'role' => 'customer', // Por defecto los registros públicos son clientes
         ]);
 
         $token = $user->createToken('auth_token')->plainTextToken;
@@ -86,38 +97,18 @@ class AuthController extends Controller
             ->first();
 
         // Verificar credenciales
-        if ($user) {
-            // Si la contraseña está hasheada, usar Hash::check
-            $passwordMatches = Hash::check($request->password, $user->password) || 
-                             $user->password === $request->password;
+        if ($user && Hash::check($request->password, $user->password)) {
+            $token = $user->createToken('admin_token')->plainTextToken;
             
-            if ($passwordMatches) {
-                $token = $user->createToken('admin_token')->plainTextToken;
-                
-                return response()->json([
-                    'message' => 'Login exitoso',
-                    'user' => [
-                        'id' => $user->id,
-                        'username' => $user->email,
-                        'name' => $user->name,
-                        'role' => $user->role
-                    ],
-                    'token' => $token
-                ], 200);
-            }
-        }
-
-        // Credenciales de respaldo hardcodeadas
-        if ($request->username === 'admin' && $request->password === 'admin123') {
             return response()->json([
                 'message' => 'Login exitoso',
                 'user' => [
-                    'id' => 1,
-                    'username' => 'admin',
-                    'name' => 'Administrador',
-                    'role' => 'admin'
+                    'id' => $user->id,
+                    'username' => $user->name,
+                    'name' => $user->name,
+                    'role' => $user->role
                 ],
-                'token' => 'admin-token-' . time()
+                'token' => $token
             ], 200);
         }
 

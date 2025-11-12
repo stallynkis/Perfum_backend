@@ -8,9 +8,27 @@ use Illuminate\Http\JsonResponse;
 
 class ProductController extends Controller
 {
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
-        $products = Product::orderBy('created_at', 'desc')->get();
+        $query = Product::query();
+
+        // Filtro por productos destacados
+        if ($request->has('featured') && $request->featured === 'true') {
+            $query->where('is_featured', true);
+        }
+
+        // Filtro por categoría
+        if ($request->has('category') && $request->category !== 'all') {
+            $query->where('category', $request->category);
+        }
+
+        // Filtro por estado activo (solo mostrar activos al público)
+        if ($request->has('active_only') && $request->active_only === 'true') {
+            $query->where('is_active', true);
+        }
+
+        // Ordenar
+        $products = $query->orderBy('created_at', 'desc')->get();
 
         return response()->json([
             'products' => $products,
@@ -36,7 +54,8 @@ class ProductController extends Controller
             'rating' => 'sometimes|numeric|between:0,5',
             'original_price' => 'nullable|numeric|min:0',
             'notes' => 'nullable|array',
-            'is_active' => 'sometimes|boolean'
+            'is_active' => 'sometimes|boolean',
+            'is_featured' => 'sometimes|boolean'
         ]);
 
         $product = Product::create($validated);
@@ -60,7 +79,8 @@ class ProductController extends Controller
             'rating' => 'sometimes|numeric|between:0,5',
             'original_price' => 'nullable|numeric|min:0',
             'notes' => 'nullable|array',
-            'is_active' => 'sometimes|boolean'
+            'is_active' => 'sometimes|boolean',
+            'is_featured' => 'sometimes|boolean'
         ]);
 
         $product->update($validated);

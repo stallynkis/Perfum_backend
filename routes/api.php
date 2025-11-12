@@ -15,6 +15,7 @@ use App\Http\Controllers\Api\ReniecController;
 use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Admin\CategoryController;
 use App\Http\Controllers\Admin\BenefitController;
+use App\Http\Controllers\Admin\BenefitSeederController;
 use App\Http\Controllers\Admin\SlideController;
 use App\Http\Controllers\Admin\UserManagementController;
 use App\Http\Controllers\Admin\ProductManagementController;
@@ -99,6 +100,7 @@ Route::middleware('auth:sanctum')->prefix('admin')->group(function () {
     Route::apiResource('products', ProductManagementController::class);
     Route::apiResource('categories', CategoryController::class);
     Route::apiResource('benefits', BenefitController::class);
+    Route::post('benefits/seed-defaults', [BenefitSeederController::class, 'seedDefaultBenefits']);
     Route::apiResource('slides', SlideController::class);
     Route::get('stats', [StatsController::class, 'index']);
 });

@@ -67,6 +67,13 @@ class ProductManagementController extends Controller
     {
         $product = Product::findOrFail($id);
 
+        // Log para debug
+        \Log::info('📥 Datos recibidos para actualizar producto:', [
+            'id' => $id,
+            'request_all' => $request->all(),
+            'is_featured' => $request->input('is_featured'),
+        ]);
+
         $validated = $request->validate([
             'name' => 'sometimes|required|string|max:255',
             'description' => 'sometimes|nullable|string',
@@ -82,7 +89,15 @@ class ProductManagementController extends Controller
             'is_featured' => 'sometimes|boolean',
         ]);
 
+        \Log::info('✅ Datos validados:', $validated);
+
         $product->update($validated);
+
+        \Log::info('💾 Producto guardado en BD:', [
+            'id' => $product->id,
+            'is_featured' => $product->is_featured,
+            'is_active' => $product->is_active,
+        ]);
 
         return response()->json([
             'product' => $product,

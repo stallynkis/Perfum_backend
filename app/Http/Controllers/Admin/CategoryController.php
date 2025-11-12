@@ -18,11 +18,17 @@ class CategoryController extends Controller
     {
         $validated = $request->validate([
             'name' => 'required|string|max:255',
-            'description' => 'required|string',
-            'image' => 'required|string',
-            'order' => 'integer',
-            'is_active' => 'boolean'
+            'description' => 'nullable|string',
+            'image' => 'nullable|string',
+            'order' => 'nullable|integer',
+            'is_active' => 'nullable|boolean'
         ]);
+
+        // Establecer valores por defecto
+        $validated['description'] = $validated['description'] ?? '';
+        $validated['image'] = $validated['image'] ?? '';
+        $validated['order'] = $validated['order'] ?? Category::max('order') + 1;
+        $validated['is_active'] = $validated['is_active'] ?? true;
 
         $category = Category::create($validated);
 

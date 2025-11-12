@@ -18,11 +18,17 @@ class BenefitController extends Controller
     {
         $validated = $request->validate([
             'title' => 'required|string|max:255',
-            'description' => 'required|string',
-            'icon' => 'required|string',
-            'order' => 'integer',
-            'is_active' => 'boolean'
+            'description' => 'nullable|string',
+            'icon' => 'nullable|string',
+            'order' => 'nullable|integer',
+            'is_active' => 'nullable|boolean'
         ]);
+
+        // Establecer valores por defecto
+        $validated['description'] = $validated['description'] ?? '';
+        $validated['icon'] = $validated['icon'] ?? 'star';
+        $validated['order'] = $validated['order'] ?? Benefit::max('order') + 1;
+        $validated['is_active'] = $validated['is_active'] ?? true;
 
         $benefit = Benefit::create($validated);
 
