@@ -96,6 +96,7 @@ Route::middleware('auth:sanctum')->group(function () {
 // Rutas de Admin (protegidas con auth:sanctum)
 Route::middleware('auth:sanctum')->prefix('admin')->group(function () {
     Route::apiResource('users', UserManagementController::class);
+    Route::apiResource('products', ProductManagementController::class);
     Route::apiResource('categories', CategoryController::class);
     Route::apiResource('benefits', BenefitController::class);
     Route::apiResource('slides', SlideController::class);

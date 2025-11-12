@@ -13,7 +13,7 @@ class ProductManagementController extends Controller
      */
     public function index()
     {
-        $products = Product::with('category')->orderBy('created_at', 'desc')->get();
+        $products = Product::orderBy('created_at', 'desc')->get();
         return response()->json(['data' => $products]);
     }
 
@@ -26,18 +26,27 @@ class ProductManagementController extends Controller
             'name' => 'required|string|max:255',
             'description' => 'nullable|string',
             'price' => 'required|numeric|min:0',
-            'stock' => 'required|integer|min:0',
-            'category_id' => 'nullable|exists:categories,id',
+            'stock' => 'sometimes|integer|min:0',
+            'category' => 'required|string|max:255',
+            'brand' => 'nullable|string|max:255',
             'image' => 'nullable|string',
-            'is_active' => 'nullable|boolean',
+            'rating' => 'sometimes|numeric|between:0,5',
+            'original_price' => 'nullable|numeric|min:0',
+            'notes' => 'nullable|array',
+            'is_active' => 'sometimes|boolean',
+            'is_featured' => 'sometimes|boolean',
         ]);
 
+        // Valores por defecto
         $validated['is_active'] = $validated['is_active'] ?? true;
+        $validated['is_featured'] = $validated['is_featured'] ?? false;
+        $validated['stock'] = $validated['stock'] ?? 0;
+        $validated['rating'] = $validated['rating'] ?? 4.5;
 
         $product = Product::create($validated);
 
         return response()->json([
-            'product' => $product->load('category'),
+            'product' => $product,
             'message' => 'Producto creado exitosamente'
         ], 201);
     }
@@ -47,7 +56,7 @@ class ProductManagementController extends Controller
      */
     public function show(string $id)
     {
-        $product = Product::with('category')->findOrFail($id);
+        $product = Product::findOrFail($id);
         return response()->json(['data' => $product]);
     }
 
@@ -62,16 +71,21 @@ class ProductManagementController extends Controller
             'name' => 'sometimes|required|string|max:255',
             'description' => 'sometimes|nullable|string',
             'price' => 'sometimes|required|numeric|min:0',
-            'stock' => 'sometimes|required|integer|min:0',
-            'category_id' => 'sometimes|nullable|exists:categories,id',
+            'stock' => 'sometimes|integer|min:0',
+            'category' => 'sometimes|string|max:255',
+            'brand' => 'sometimes|nullable|string|max:255',
             'image' => 'sometimes|nullable|string',
-            'is_active' => 'sometimes|nullable|boolean',
+            'rating' => 'sometimes|numeric|between:0,5',
+            'original_price' => 'sometimes|nullable|numeric|min:0',
+            'notes' => 'sometimes|nullable|array',
+            'is_active' => 'sometimes|boolean',
+            'is_featured' => 'sometimes|boolean',
         ]);
 
         $product->update($validated);
 
         return response()->json([
-            'product' => $product->load('category'),
+            'product' => $product,
             'message' => 'Producto actualizado exitosamente'
         ]);
     }
