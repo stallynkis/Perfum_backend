@@ -25,6 +25,9 @@ class Order extends Model
         'agency_id',
         'agency_name',
         'agency_address',
+        'tracking_number',
+        'tracking_order_number',
+        'shipped_at',
         'items',
         'subtotal',
         'tax',
@@ -47,6 +50,7 @@ class Order extends Model
         'shipping_cost' => 'decimal:2',
         'total' => 'decimal:2',
         'requires_admin_confirmation' => 'boolean',
+        'shipped_at' => 'datetime',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
         'deleted_at' => 'datetime'

@@ -17,8 +17,8 @@ return new class extends Migration
             $table->string('email')->unique();
             $table->timestamp('email_verified_at')->nullable();
             $table->string('password');
-            $table->enum('role', ['admin', 'seller', 'customer'])->default('customer');
-            $table->string('document_type')->nullable(); // DNI, RUC, CE
+            $table->string('role')->default('client'); // Soporte para: admin, client, vendedor, seller, customer, user
+            $table->string('document_type')->nullable(); // dni, ce, passport
             $table->string('document_number')->nullable();
             $table->string('phone')->nullable();
             $table->string('address')->nullable();

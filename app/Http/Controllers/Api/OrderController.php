@@ -205,20 +205,50 @@ class OrderController extends Controller
             ], 404);
         }
 
-        $validator = Validator::make($request->all(), [
+        // Validación base
+        $rules = [
             'status' => 'sometimes|in:pending,processing,shipped,delivered,cancelled',
             'payment_status' => 'sometimes|in:pending,paid,failed,refunded',
-            'admin_notes' => 'nullable|string'
-        ]);
+            'admin_notes' => 'nullable|string',
+            'tracking_number' => 'nullable|string|max:100',
+            'tracking_order_number' => 'nullable|string|max:100'
+        ];
+
+        // Si se está cambiando a "shipped" y el pedido es por agencia (Olva/Shalom)
+        // entonces los números de tracking son OBLIGATORIOS
+        if ($request->status === 'shipped' && $order->delivery_type === 'agency') {
+            $rules['tracking_number'] = 'required|string|max:100';
+            $rules['tracking_order_number'] = 'required|string|max:100';
+        }
+
+        $validator = Validator::make($request->all(), $rules);
 
         if ($validator->fails()) {
             return response()->json([
                 'success' => false,
-                'errors' => $validator->errors()
+                'errors' => $validator->errors(),
+                'message' => 'Para marcar como enviado por agencia, debe proporcionar el número de guía y número de orden'
             ], 422);
         }
 
-        $order->update($request->only(['status', 'payment_status', 'admin_notes']));
+        // Preparar datos para actualizar
+        $updateData = $request->only(['status', 'payment_status', 'admin_notes']);
+
+        // Si se proporciona tracking, agregarlo
+        if ($request->has('tracking_number')) {
+            $updateData['tracking_number'] = $request->tracking_number;
+        }
+        
+        if ($request->has('tracking_order_number')) {
+            $updateData['tracking_order_number'] = $request->tracking_order_number;
+        }
+
+        // Si se cambia a "shipped", guardar la fecha de envío
+        if ($request->status === 'shipped' && $order->status !== 'shipped') {
+            $updateData['shipped_at'] = now();
+        }
+
+        $order->update($updateData);
 
         return response()->json([
             'success' => true,
@@ -319,5 +349,30 @@ class OrderController extends Controller
         ];
 
         return response()->json($stats);
+    }
+
+    /**
+     * Get orders for the authenticated customer
+     */
+    public function getCustomerOrders(Request $request)
+    {
+        $user = $request->user();
+        
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Usuario no autenticado'
+            ], 401);
+        }
+
+        // Obtener pedidos del usuario autenticado por email
+        $orders = Order::where('customer_email', $user->email)
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        return response()->json([
+            'success' => true,
+            'data' => $orders
+        ]);
     }
 }

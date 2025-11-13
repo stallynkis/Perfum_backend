@@ -21,66 +21,84 @@ use App\Http\Controllers\Admin\UserManagementController;
 use App\Http\Controllers\Admin\ProductManagementController;
 use App\Http\Controllers\Admin\StatsController;
 use App\Http\Controllers\User\DeliveryPreferencesController;
+use App\Http\Controllers\BrandController;
 
+// ============================================
+// RUTAS PÚBLICAS (Sin autenticación)
+// ============================================
+
+// Health check
 Route::get('/health', function () {
     return response()->json(['status' => 'OK', 'timestamp' => now()]);
 });
 
+// Autenticación
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/register', [AuthController::class, 'register']);
-
 Route::post('/admin/login', [AuthController::class, 'adminLogin']);
-Route::post('/admin/logout', [AuthController::class, 'adminLogout']);
+Route::post('/seller/login', [AuthController::class, 'sellerLogin']);
 
-Route::middleware('auth:sanctum')->group(function () {
-    Route::get('/user', [AuthController::class, 'user']);
-    Route::post('/logout', [AuthController::class, 'logout']);
-});
-
+// Productos públicos
 Route::get('/products', [ProductController::class, 'index']);
 Route::get('/products/{product}', [ProductController::class, 'show']);
 
-// Orders - Public routes
+// Marcas públicas
+Route::get('/brands', [BrandController::class, 'index']);
+
+// Orders públicos
 Route::post('/orders', [OrderController::class, 'store']);
 Route::get('/orders/stats', [OrderController::class, 'stats']);
 
+// Contacto público
+Route::post('/contact', [ContactController::class, 'store']);
+Route::get('/contact-info', [ContactInfoController::class, 'index']);
+
+// Consulta RENIEC pública
+Route::get('/reniec/consultar/{dni}', [ReniecController::class, 'consultarDNI']);
+
+// ============================================
+// RUTAS PROTEGIDAS (Requieren autenticación)
+// ============================================
+
 Route::middleware('auth:sanctum')->group(function () {
+    // ========== Autenticación y Usuario ==========
+    Route::get('/user', [AuthController::class, 'user']);
+    Route::put('/user/profile', [AuthController::class, 'updateProfile']);
+    Route::post('/logout', [AuthController::class, 'logout']);
+
+    // ========== Productos (CRUD completo) ==========
     Route::post('/products', [ProductController::class, 'store']);
     Route::put('/products/{product}', [ProductController::class, 'update']);
     Route::delete('/products/{product}', [ProductController::class, 'destroy']);
 
+    // ========== Usuarios API ==========
     Route::apiResource('/users', UserController::class);
     Route::get('/sellers', [UserController::class, 'sellers']);
     Route::post('/users/{user}/toggle-active', [UserController::class, 'toggleActive']);
 
+    // ========== Transacciones ==========
     Route::apiResource('/transactions', TransactionController::class);
     Route::get('/transactions/summary/financial', [TransactionController::class, 'summary']);
 
+    // ========== Compras ==========
     Route::apiResource('/purchases', PurchaseController::class);
 
+    // ========== Ventas ==========
     Route::apiResource('/sales', SaleController::class);
     
-    // Orders - Protected routes
+    // ========== Orders (rutas protegidas) ==========
     Route::get('/orders', [OrderController::class, 'index']);
+    Route::get('/orders/customer', [OrderController::class, 'getCustomerOrders']); // Pedidos del cliente autenticado
     Route::get('/orders/{id}', [OrderController::class, 'show']);
     Route::put('/orders/{id}', [OrderController::class, 'update']);
     Route::post('/orders/{id}/confirm-payment', [OrderController::class, 'confirmPayment']);
     Route::delete('/orders/{id}', [OrderController::class, 'destroy']);
-});
 
-Route::post('/contact', [ContactController::class, 'store']);
-
-Route::get('/contact-info', [ContactInfoController::class, 'index']);
-Route::middleware('auth:sanctum')->group(function () {
+    // ========== Información de Contacto ==========
     Route::put('/contact-info', [ContactInfoController::class, 'update']);
     Route::get('/contact-info/history', [ContactInfoController::class, 'history']);
-});
 
-// Ruta pública para consultar DNI en RENIEC
-Route::get('/reniec/consultar/{dni}', [ReniecController::class, 'consultarDNI']);
-
-// Rutas de Notificaciones (protegidas con auth:sanctum)
-Route::middleware('auth:sanctum')->group(function () {
+    // ========== Notificaciones ==========
     Route::get('/notifications', [NotificationController::class, 'index']);
     Route::get('/notifications/stats', [NotificationController::class, 'stats']);
     Route::get('/notifications/unread-count', [NotificationController::class, 'unreadCount']);
@@ -92,22 +110,43 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/notifications/{id}', [NotificationController::class, 'destroy']);
     Route::delete('/notifications/clear/read', [NotificationController::class, 'clearRead']);
     Route::delete('/notifications/clear/all', [NotificationController::class, 'clearAll']);
-});
 
-// Rutas de Admin (protegidas con auth:sanctum)
-Route::middleware('auth:sanctum')->prefix('admin')->group(function () {
-    Route::apiResource('users', UserManagementController::class);
-    Route::apiResource('products', ProductManagementController::class);
-    Route::apiResource('categories', CategoryController::class);
-    Route::apiResource('benefits', BenefitController::class);
-    Route::post('benefits/seed-defaults', [BenefitSeederController::class, 'seedDefaultBenefits']);
-    Route::apiResource('slides', SlideController::class);
-    Route::get('stats', [StatsController::class, 'index']);
-});
+    // ========== Preferencias de Entrega ==========
+    Route::prefix('user')->group(function () {
+        Route::get('delivery-preferences', [DeliveryPreferencesController::class, 'show']);
+        Route::post('delivery-preferences', [DeliveryPreferencesController::class, 'store']);
+        Route::delete('delivery-preferences', [DeliveryPreferencesController::class, 'destroy']);
+    });
 
-// Rutas de preferencias de usuario
-Route::middleware('auth:sanctum')->prefix('user')->group(function () {
-    Route::get('delivery-preferences', [DeliveryPreferencesController::class, 'show']);
-    Route::post('delivery-preferences', [DeliveryPreferencesController::class, 'store']);
-    Route::delete('delivery-preferences', [DeliveryPreferencesController::class, 'destroy']);
+    // ========== Panel de Administración ==========
+    Route::prefix('admin')->group(function () {
+        // Verificar sesión de admin
+        Route::get('me', [AuthController::class, 'adminMe']);
+        Route::post('logout', [AuthController::class, 'adminLogout']);
+        
+        // Gestión de usuarios del admin
+        Route::apiResource('users', UserManagementController::class);
+        
+        // Gestión de productos del admin
+        Route::apiResource('products', ProductManagementController::class);
+        
+        // Categorías
+        Route::apiResource('categories', CategoryController::class);
+        
+        // Marcas
+        Route::get('brands', [BrandController::class, 'adminIndex']);
+        Route::post('brands', [BrandController::class, 'store']);
+        Route::put('brands/{id}', [BrandController::class, 'update']);
+        Route::delete('brands/{id}', [BrandController::class, 'destroy']);
+        
+        // Beneficios
+        Route::apiResource('benefits', BenefitController::class);
+        Route::post('benefits/seed-defaults', [BenefitSeederController::class, 'seedDefaultBenefits']);
+        
+        // Slides del carrusel
+        Route::apiResource('slides', SlideController::class);
+        
+        // Estadísticas
+        Route::get('stats', [StatsController::class, 'index']);
+    });
 });
