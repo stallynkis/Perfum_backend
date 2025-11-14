@@ -13,6 +13,9 @@ return new class extends Migration
             $table->string('order_number')->unique();
             $table->foreignId('user_id')->nullable()->constrained()->onDelete('set null');
             
+            // Source: 'web' (tienda online) o 'seller' (vendedores)
+            $table->enum('source', ['web', 'seller'])->default('web');
+            
             // Customer Information
             $table->string('customer_name');
             $table->string('customer_email');
@@ -39,7 +42,7 @@ return new class extends Migration
             $table->decimal('total', 10, 2);
             
             // Payment Information
-            $table->enum('payment_method', ['paypal', 'yape'])->default('paypal');
+            $table->enum('payment_method', ['paypal', 'yape', 'cash', 'card', 'transfer'])->default('paypal');
             $table->string('transaction_id')->nullable();
             $table->string('approval_code')->nullable(); // For Yape
             $table->enum('payment_status', ['pending', 'paid', 'failed', 'refunded'])->default('pending');

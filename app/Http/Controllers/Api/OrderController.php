@@ -16,7 +16,18 @@ class OrderController extends Controller
      */
     public function index(Request $request)
     {
-        $query = Order::with('user')->orderBy('created_at', 'desc');
+        // Optimización: no cargar relación 'user' si se pide muchos registros (dashboard)
+        $perPage = $request->get('per_page', 15);
+        
+        if ($perPage > 50) {
+            // Para dashboard con muchos registros, no cargar relaciones
+            $query = Order::query();
+        } else {
+            // Para listados normales, cargar relación user
+            $query = Order::with('user');
+        }
+        
+        $query->orderBy('created_at', 'desc');
 
         // Filter by order source (web customers vs sellers)
         if ($request->has('source')) {
@@ -44,7 +55,6 @@ class OrderController extends Controller
         }
 
         // Pagination
-        $perPage = $request->get('per_page', 15);
         $orders = $query->paginate($perPage);
 
         return response()->json($orders);
@@ -167,6 +177,25 @@ class OrderController extends Controller
                 'requires_admin_confirmation' => $requiresConfirmation
             ]);
 
+            // 🔔 CREAR NOTIFICACIÓN cuando se crea una orden
+            \App\Models\Notification::create([
+                'type' => 'new_order',
+                'title' => '🛒 Nuevo Pedido',
+                'message' => "Pedido #{$orderNumber} - {$request->customer_name} - S/ {$request->total}",
+                'priority' => $requiresConfirmation ? 'high' : 'medium',
+                'read' => false,
+                'related_tab' => 'pedidos',
+                'order_id' => $order->id,
+                'user_id' => $order->user_id,
+                'data' => [
+                    'order_number' => $orderNumber,
+                    'customer_name' => $request->customer_name,
+                    'total' => $request->total,
+                    'payment_method' => $request->payment_method,
+                    'requires_confirmation' => $requiresConfirmation
+                ]
+            ]);
+
             DB::commit();
 
             return response()->json([
@@ -274,6 +303,34 @@ class OrderController extends Controller
 
         $order->update($updateData);
 
+        // 🔔 Crear notificación cuando cambia el estado importante
+        if (isset($updateData['status'])) {
+            $statusMessages = [
+                'processing' => '⏳ Pedido en Preparación',
+                'shipped' => '🚚 Pedido Enviado',
+                'delivered' => '✅ Pedido Entregado',
+                'cancelled' => '❌ Pedido Cancelado'
+            ];
+
+            if (isset($statusMessages[$updateData['status']])) {
+                \App\Models\Notification::create([
+                    'type' => 'order_status_change',
+                    'title' => $statusMessages[$updateData['status']],
+                    'message' => "Pedido #{$order->order_number} - Estado: {$updateData['status']}",
+                    'priority' => 'medium',
+                    'read' => false,
+                    'related_tab' => 'pedidos',
+                    'order_id' => $order->id,
+                    'user_id' => $order->user_id,
+                    'data' => [
+                        'order_number' => $order->order_number,
+                        'old_status' => $order->status,
+                        'new_status' => $updateData['status']
+                    ]
+                ]);
+            }
+        }
+
         return response()->json([
             'success' => true,
             'message' => 'Pedido actualizado exitosamente',
@@ -296,6 +353,23 @@ class OrderController extends Controller
         }
 
         $order->markAsPaid($request->transaction_id);
+
+        // 🔔 Crear notificación cuando se confirma el pago
+        \App\Models\Notification::create([
+            'type' => 'payment_confirmed',
+            'title' => '💰 Pago Confirmado',
+            'message' => "Pago confirmado para pedido #{$order->order_number} - S/ {$order->total}",
+            'priority' => 'medium',
+            'read' => false,
+            'related_tab' => 'pedidos',
+            'order_id' => $order->id,
+            'user_id' => $order->user_id,
+            'data' => [
+                'order_number' => $order->order_number,
+                'total' => $order->total,
+                'transaction_id' => $request->transaction_id
+            ]
+        ]);
 
         return response()->json([
             'success' => true,

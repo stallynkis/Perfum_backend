@@ -27,8 +27,23 @@ class ProductController extends Controller
             $query->where('is_active', true);
         }
 
+        // Optimización: solo seleccionar campos necesarios para dashboard
+        if ($request->has('fields') && $request->fields === 'minimal') {
+            $query->select('id', 'name', 'stock', 'price', 'is_active', 'category', 'brand');
+        }
+
         // Ordenar
-        $products = $query->orderBy('created_at', 'desc')->get();
+        $query->orderBy('created_at', 'desc');
+
+        // Paginación opcional para grandes volúmenes
+        if ($request->has('paginate') && $request->paginate === 'true') {
+            $perPage = $request->get('per_page', 50);
+            $products = $query->paginate($perPage);
+            return response()->json($products);
+        }
+
+        // Sin paginación (para compatibilidad)
+        $products = $query->get();
 
         return response()->json([
             'products' => $products,
