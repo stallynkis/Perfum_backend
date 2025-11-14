@@ -18,6 +18,11 @@ class OrderController extends Controller
     {
         $query = Order::with('user')->orderBy('created_at', 'desc');
 
+        // Filter by order source (web customers vs sellers)
+        if ($request->has('source')) {
+            $query->where('source', $request->source);
+        }
+
         // Filter by status
         if ($request->has('status')) {
             $query->where('status', $request->status);
@@ -70,7 +75,7 @@ class OrderController extends Controller
             'tax' => 'nullable|numeric|min:0',
             'shipping_cost' => 'nullable|numeric|min:0',
             'total' => 'required|numeric|min:0',
-            'payment_method' => 'required|in:paypal,yape',
+            'payment_method' => 'required|in:paypal,yape,cash,card,transfer',
             'transaction_id' => 'nullable|string|max:255',
             'approval_code' => 'nullable|string|max:50',
             'notes' => 'nullable|string'
@@ -121,12 +126,21 @@ class OrderController extends Controller
 
             // Determine if requires admin confirmation (Yape needs confirmation)
             $requiresConfirmation = $request->payment_method === 'yape';
-            $paymentStatus = $request->payment_method === 'paypal' ? 'paid' : 'pending';
+            
+            // Ventas de vendedores (cash, card) se marcan como pagadas automáticamente
+            $paymentStatus = in_array($request->payment_method, ['paypal', 'cash', 'card', 'transfer']) 
+                ? 'paid' 
+                : 'pending';
+
+            // Determinar la fuente de la orden (web o seller)
+            // Si el payment_method es cash, card o transfer, es venta de vendedor
+            $source = in_array($request->payment_method, ['cash', 'card', 'transfer']) ? 'seller' : 'web';
 
             // Create order
             $order = Order::create([
                 'order_number' => $orderNumber,
                 'user_id' => $request->user_id ?? auth()->id(),
+                'source' => $source,
                 'customer_name' => $request->customer_name,
                 'customer_email' => $request->customer_email,
                 'customer_phone' => $request->customer_phone,
@@ -211,7 +225,8 @@ class OrderController extends Controller
             'payment_status' => 'sometimes|in:pending,paid,failed,refunded',
             'admin_notes' => 'nullable|string',
             'tracking_number' => 'nullable|string|max:100',
-            'tracking_order_number' => 'nullable|string|max:100'
+            'tracking_order_number' => 'nullable|string|max:100',
+            'shipping_cost' => 'nullable|numeric|min:0'
         ];
 
         // Si se está cambiando a "shipped" y el pedido es por agencia (Olva/Shalom)
@@ -241,6 +256,15 @@ class OrderController extends Controller
         
         if ($request->has('tracking_order_number')) {
             $updateData['tracking_order_number'] = $request->tracking_order_number;
+        }
+
+        // Si se proporciona costo de envío, agregarlo y recalcular el total
+        if ($request->has('shipping_cost')) {
+            $newShippingCost = $request->shipping_cost;
+            $updateData['shipping_cost'] = $newShippingCost;
+            
+            // Recalcular el total: subtotal + tax + shipping_cost
+            $updateData['total'] = $order->subtotal + $order->tax + $newShippingCost;
         }
 
         // Si se cambia a "shipped", guardar la fecha de envío
@@ -365,8 +389,11 @@ class OrderController extends Controller
             ], 401);
         }
 
-        // Obtener pedidos del usuario autenticado por email
-        $orders = Order::where('customer_email', $user->email)
+        // Obtener pedidos del usuario autenticado (por user_id O por email)
+        $orders = Order::where(function($query) use ($user) {
+                $query->where('user_id', $user->id)
+                      ->orWhere('customer_email', $user->email);
+            })
             ->orderBy('created_at', 'desc')
             ->get();
 
