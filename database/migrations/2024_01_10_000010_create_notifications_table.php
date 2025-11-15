@@ -27,11 +27,11 @@ return new class extends Migration
                 $table->string('related_tab')->nullable();
                 $table->string('related_id')->nullable();
 
-                // ❌ SIN foreign keys (evita errores)
-                $table->foreignId('order_id')->nullable();
-                $table->foreignId('user_id')->nullable();
-                $table->foreignId('vendor_id')->nullable();
-                $table->foreignId('contact_form_id')->nullable();
+                // Sin foreign keys para evitar errores de dependencias
+                $table->unsignedBigInteger('order_id')->nullable();
+                $table->unsignedBigInteger('user_id')->nullable();
+                $table->unsignedBigInteger('vendor_id')->nullable();
+                $table->unsignedBigInteger('contact_form_id')->nullable();
 
                 $table->json('data')->nullable();
                 $table->timestamps();
