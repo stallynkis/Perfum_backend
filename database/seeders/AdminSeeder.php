@@ -19,7 +19,7 @@ class AdminSeeder extends Seeder
                 'role' => 'admin'
             ]
         );
-
+//aa
         echo "✅ Usuario admin creado correctamente\n";
         echo "Username: admin\n";
         echo "Password: admin123\n";
