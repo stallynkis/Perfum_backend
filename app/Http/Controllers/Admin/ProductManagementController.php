@@ -22,33 +22,51 @@ class ProductManagementController extends Controller
      */
     public function store(Request $request)
     {
-        $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'description' => 'nullable|string',
-            'price' => 'required|numeric|min:0',
-            'stock' => 'sometimes|integer|min:0',
-            'category' => 'required|string|max:255',
-            'brand' => 'nullable|string|max:255',
-            'image' => 'nullable|string',
-            'rating' => 'sometimes|numeric|between:0,5',
-            'original_price' => 'nullable|numeric|min:0',
-            'notes' => 'nullable|array',
-            'is_active' => 'sometimes|boolean',
-            'is_featured' => 'sometimes|boolean',
-        ]);
+        try {
+            $validated = $request->validate([
+                'name' => 'required|string|max:255',
+                'description' => 'nullable|string',
+                'price' => 'required|numeric|min:0',
+                'stock' => 'nullable|integer|min:0',
+                'category' => 'required|string|max:255',
+                'brand' => 'nullable|string|max:255',
+                'image' => 'nullable|string',
+                'rating' => 'nullable|numeric|between:0,5',
+                'original_price' => 'nullable|numeric|min:0',
+                'notes' => 'nullable|array',
+                'is_active' => 'nullable|boolean',
+                'is_featured' => 'nullable|boolean',
+            ]);
 
-        // Valores por defecto
-        $validated['is_active'] = $validated['is_active'] ?? true;
-        $validated['is_featured'] = $validated['is_featured'] ?? false;
-        $validated['stock'] = $validated['stock'] ?? 0;
-        $validated['rating'] = $validated['rating'] ?? 4.5;
+            // Valores por defecto
+            $validated['is_active'] = $validated['is_active'] ?? true;
+            $validated['is_featured'] = $validated['is_featured'] ?? false;
+            $validated['stock'] = $validated['stock'] ?? 0;
+            $validated['rating'] = $validated['rating'] ?? 4.5;
 
-        $product = Product::create($validated);
+            $product = Product::create($validated);
 
-        return response()->json([
-            'product' => $product,
-            'message' => 'Producto creado exitosamente'
-        ], 201);
+            return response()->json([
+                'product' => $product,
+                'message' => 'Producto creado exitosamente'
+            ], 201);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'message' => 'Error de validación',
+                'errors' => $e->errors()
+            ], 422);
+        } catch (\Exception $e) {
+            \Log::error('Error al crear producto (Admin): ' . $e->getMessage(), [
+                'request' => $request->all(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return response()->json([
+                'message' => 'Error al crear producto',
+                'error' => $e->getMessage(),
+                'details' => config('app.debug') ? $e->getTraceAsString() : null
+            ], 500);
+        }
     }
 
     /**
