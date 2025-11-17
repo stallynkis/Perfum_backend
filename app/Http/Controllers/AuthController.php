@@ -16,7 +16,9 @@ class AuthController extends Controller
             'password' => 'required',
         ]);
 
-        $user = User::where('email', $request->email)->first();
+        $user = User::select('id', 'name', 'email', 'password', 'role', 'phone', 'address')
+            ->where('email', $request->email)
+            ->first();
 
         if (!$user || !Hash::check($request->password, $user->password)) {
             throw ValidationException::withMessages([
@@ -24,6 +26,9 @@ class AuthController extends Controller
             ]);
         }
 
+        // Eliminar tokens antiguos para este usuario
+        $user->tokens()->delete();
+        
         $token = $user->createToken('auth_token')->plainTextToken;
 
         return response()->json([
@@ -122,7 +127,8 @@ class AuthController extends Controller
         ]);
 
         // Buscar usuario por email o nombre con rol admin
-        $user = User::where(function($query) use ($request) {
+        $user = User::select('id', 'name', 'email', 'password', 'role')
+            ->where(function($query) use ($request) {
                 $query->where('email', $request->username)
                       ->orWhere('name', $request->username);
             })
@@ -131,6 +137,9 @@ class AuthController extends Controller
 
         // Verificar credenciales
         if ($user && Hash::check($request->password, $user->password)) {
+            // Eliminar tokens antiguos
+            $user->tokens()->delete();
+            
             $token = $user->createToken('admin_token')->plainTextToken;
             
             return response()->json([
@@ -179,12 +188,13 @@ class AuthController extends Controller
             'password' => 'required|string',
         ]);
 
-        // Buscar usuario por email o nombre con rol seller
+        // Buscar usuario por email o nombre con rol vendedor
         $user = User::where(function($query) use ($request) {
                 $query->where('email', $request->username)
                       ->orWhere('name', $request->username);
             })
-            ->where('role', 'seller')
+            ->where('role', 'vendedor')
+            ->where('is_active', true)
             ->first();
 
         // Verificar credenciales
@@ -192,19 +202,21 @@ class AuthController extends Controller
             $token = $user->createToken('seller_token')->plainTextToken;
             
             return response()->json([
+                'status' => 'success',
                 'message' => 'Login exitoso',
+                'token' => $token,
                 'user' => [
                     'id' => $user->id,
                     'username' => $user->name,
                     'name' => $user->name,
                     'email' => $user->email,
                     'role' => $user->role
-                ],
-                'token' => $token
+                ]
             ], 200);
         }
 
         return response()->json([
+            'status' => 'error',
             'message' => 'Credenciales inválidas'
         ], 401);
     }

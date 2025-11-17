@@ -8,6 +8,15 @@ use Illuminate\Http\Request;
 
 class SlideController extends Controller
 {
+    // Endpoint público para el carrusel del home
+    public function publicIndex()
+    {
+        $slides = Slide::where('isActive', true)
+            ->orderBy('order')
+            ->get();
+        return response()->json(['data' => $slides]);
+    }
+
     public function index()
     {
         $slides = Slide::orderBy('order')->get();
@@ -22,6 +31,8 @@ class SlideController extends Controller
             'subtitle' => 'nullable|string',
             'buttonText' => 'nullable|string',
             'buttonLink' => 'nullable|string',
+            'buttonAction' => 'nullable|string|in:navigate,modal,external',
+            'actionValue' => 'nullable|string',
             'order' => 'integer',
             'isActive' => 'boolean'
         ]);
@@ -47,6 +58,8 @@ class SlideController extends Controller
             'subtitle' => 'nullable|string',
             'buttonText' => 'nullable|string',
             'buttonLink' => 'nullable|string',
+            'buttonAction' => 'nullable|string|in:navigate,modal,external',
+            'actionValue' => 'nullable|string',
             'order' => 'integer',
             'isActive' => 'boolean'
         ]);

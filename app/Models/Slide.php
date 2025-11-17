@@ -12,6 +12,8 @@ class Slide extends Model
         'subtitle',
         'buttonText',
         'buttonLink',
+        'buttonAction',
+        'actionValue',
         'order',
         'isActive'
     ];

@@ -8,6 +8,15 @@ use Illuminate\Http\Request;
 
 class BenefitController extends Controller
 {
+    // Endpoint público para beneficios activos
+    public function publicIndex()
+    {
+        $benefits = Benefit::where('is_active', true)
+            ->orderBy('order')
+            ->get();
+        return response()->json(['data' => $benefits]);
+    }
+
     public function index()
     {
         $benefits = Benefit::orderBy('order')->get();

@@ -38,7 +38,7 @@ class UserController extends Controller
             'name' => 'required|string|max:255',
             'email' => 'required|string|email|max:255|unique:users',
             'password' => 'required|string|min:6',
-            'role' => 'required|in:admin,seller,customer',
+            'role' => 'required|in:admin,vendedor,customer',
             'document_type' => 'nullable|string|in:DNI,RUC,CE',
             'document_number' => 'nullable|string|max:20',
             'phone' => 'nullable|string|max:20',
@@ -74,7 +74,7 @@ class UserController extends Controller
             'name' => 'sometimes|required|string|max:255',
             'email' => 'sometimes|required|string|email|max:255|unique:users,email,' . $user->id,
             'password' => 'sometimes|nullable|string|min:6',
-            'role' => 'sometimes|required|in:admin,seller,customer',
+            'role' => 'sometimes|required|in:admin,vendedor,customer',
             'document_type' => 'nullable|string|in:DNI,RUC,CE',
             'document_number' => 'nullable|string|max:20',
             'phone' => 'nullable|string|max:20',
@@ -107,7 +107,7 @@ class UserController extends Controller
 
     public function sellers()
     {
-        $sellers = User::where('role', 'seller')
+        $sellers = User::where('role', 'vendedor')
             ->where('is_active', true)
             ->orderBy('name')
             ->get(['id', 'name', 'email', 'document_number', 'phone']);

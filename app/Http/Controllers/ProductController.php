@@ -31,6 +31,15 @@ class ProductController extends Controller
         if ($request->has('fields') && $request->fields === 'minimal') {
             $query->select('id', 'name', 'stock', 'price', 'is_active', 'category', 'brand');
         }
+        
+        // Filtro por activos/inactivos
+        if ($request->has('status')) {
+            if ($request->status === 'active') {
+                $query->where('is_active', true);
+            } elseif ($request->status === 'inactive') {
+                $query->where('is_active', false);
+            }
+        }
 
         // Ordenar
         $query->orderBy('created_at', 'desc');

@@ -21,7 +21,6 @@ class Notification extends Model
         'order_id',
         'user_id',
         'vendor_id',
-        'contact_form_id',
         'data'
     ];
 
@@ -56,14 +55,6 @@ class Notification extends Model
     public function vendor(): BelongsTo
     {
         return $this->belongsTo(User::class, 'vendor_id');
-    }
-
-    /**
-     * Relación con formulario de contacto
-     */
-    public function contactForm(): BelongsTo
-    {
-        return $this->belongsTo(ContactForm::class);
     }
 
     /**

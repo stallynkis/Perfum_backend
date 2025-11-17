@@ -66,9 +66,11 @@ class OrderController extends Controller
     public function store(Request $request)
     {
         $validator = Validator::make($request->all(), [
+            'source' => 'nullable|in:web,seller',
+            'user_id' => 'nullable|exists:users,id',
             'customer_name' => 'required|string|max:255',
-            'customer_email' => 'required|email|max:255',
-            'customer_phone' => 'required|string|max:20',
+            'customer_email' => 'nullable|email|max:255',
+            'customer_phone' => 'nullable|string|max:20',
             'customer_document' => 'nullable|string|max:50',
             'delivery_type' => 'required|in:home,agency',
             'shipping_address' => 'required_if:delivery_type,home|nullable|string',
@@ -86,9 +88,12 @@ class OrderController extends Controller
             'shipping_cost' => 'nullable|numeric|min:0',
             'total' => 'required|numeric|min:0',
             'payment_method' => 'required|in:paypal,yape,cash,card,transfer',
+            'payment_status' => 'nullable|in:pending,paid,failed,refunded',
+            'status' => 'nullable|in:pending,processing,shipped,delivered,cancelled',
             'transaction_id' => 'nullable|string|max:255',
             'approval_code' => 'nullable|string|max:50',
-            'notes' => 'nullable|string'
+            'notes' => 'nullable|string',
+            'document_type' => 'nullable|in:ticket,boleta,factura'
         ]);
 
         if ($validator->fails()) {
@@ -137,14 +142,10 @@ class OrderController extends Controller
             // Determine if requires admin confirmation (Yape needs confirmation)
             $requiresConfirmation = $request->payment_method === 'yape';
             
-            // Ventas de vendedores (cash, card) se marcan como pagadas automáticamente
-            $paymentStatus = in_array($request->payment_method, ['paypal', 'cash', 'card', 'transfer']) 
-                ? 'paid' 
-                : 'pending';
-
-            // Determinar la fuente de la orden (web o seller)
-            // Si el payment_method es cash, card o transfer, es venta de vendedor
-            $source = in_array($request->payment_method, ['cash', 'card', 'transfer']) ? 'seller' : 'web';
+            // Usar valores del request o determinar automáticamente
+            $source = $request->source ?? (in_array($request->payment_method, ['cash', 'card', 'transfer']) ? 'seller' : 'web');
+            $paymentStatus = $request->payment_status ?? (in_array($request->payment_method, ['paypal', 'cash', 'card', 'transfer']) ? 'paid' : 'pending');
+            $orderStatus = $request->status ?? 'pending';
 
             // Create order
             $order = Order::create([
@@ -172,10 +173,62 @@ class OrderController extends Controller
                 'transaction_id' => $request->transaction_id,
                 'approval_code' => $request->approval_code,
                 'payment_status' => $paymentStatus,
-                'status' => 'pending',
+                'status' => $orderStatus,
                 'notes' => $request->notes,
                 'requires_admin_confirmation' => $requiresConfirmation
             ]);
+
+            // 👤 GUARDAR CLIENTE automáticamente si es venta de vendedor
+            if ($source === 'seller' && $order->user_id && $request->customer_name && 
+                $request->customer_name !== 'Cliente en tienda' && 
+                $request->customer_name !== 'CLIENTES VARIOS' &&
+                trim($request->customer_name) !== '') {
+                
+                // Verificar si el cliente ya existe para este vendedor
+                $existingCustomer = \App\Models\SellerCustomer::where('seller_id', $order->user_id)
+                    ->where(function($query) use ($request) {
+                        if ($request->customer_document && $request->customer_document !== '00000000') {
+                            $query->where('document', $request->customer_document);
+                        } else {
+                            $query->where('name', $request->customer_name);
+                        }
+                    })
+                    ->first();
+
+                if (!$existingCustomer) {
+                    // Crear nuevo cliente solo si tiene datos relevantes
+                    if ($request->customer_document && $request->customer_document !== '00000000' ||
+                        $request->customer_phone ||
+                        $request->customer_email) {
+                        \App\Models\SellerCustomer::create([
+                            'seller_id' => $order->user_id,
+                            'name' => $request->customer_name,
+                            'document' => ($request->customer_document && $request->customer_document !== '00000000') ? $request->customer_document : null,
+                            'phone' => $request->customer_phone,
+                            'email' => $request->customer_email,
+                            'address' => $request->shipping_address
+                        ]);
+                    }
+                } else {
+                    // Actualizar datos si están vacíos
+                    $updateData = [];
+                    if (!$existingCustomer->document && $request->customer_document && $request->customer_document !== '00000000') {
+                        $updateData['document'] = $request->customer_document;
+                    }
+                    if (!$existingCustomer->phone && $request->customer_phone) {
+                        $updateData['phone'] = $request->customer_phone;
+                    }
+                    if (!$existingCustomer->email && $request->customer_email) {
+                        $updateData['email'] = $request->customer_email;
+                    }
+                    if (!$existingCustomer->address && $request->shipping_address) {
+                        $updateData['address'] = $request->shipping_address;
+                    }
+                    if (!empty($updateData)) {
+                        $existingCustomer->update($updateData);
+                    }
+                }
+            }
 
             // 🔔 CREAR NOTIFICACIÓN cuando se crea una orden
             \App\Models\Notification::create([
@@ -474,6 +527,79 @@ class OrderController extends Controller
         return response()->json([
             'success' => true,
             'data' => $orders
+        ]);
+    }
+
+    /**
+     * Get orders for the authenticated seller (OPTIMIZADO)
+     */
+    public function getSellerOrders(Request $request)
+    {
+        $user = $request->user();
+        
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Usuario no autenticado'
+            ], 401);
+        }
+
+        // Query optimizada solo para órdenes del vendedor
+        $query = Order::where('user_id', $user->id)
+            ->where('source', 'seller')
+            ->select(['id', 'order_number', 'customer_name', 'customer_email', 'customer_phone', 'customer_document', 
+                     'total', 'subtotal', 'tax', 'payment_method', 'payment_status', 'status', 'document_type', 
+                     'items', 'user_id', 'source', 'created_at', 'updated_at'])
+            ->orderBy('created_at', 'desc');
+
+        // Filtro por fecha si se proporciona
+        if ($request->has('date')) {
+            $date = $request->date;
+            $query->whereDate('created_at', $date);
+        }
+
+        // Filtro por rango de fechas
+        if ($request->has('start_date') && $request->has('end_date')) {
+            $query->whereBetween('created_at', [$request->start_date, $request->end_date]);
+        }
+
+        $orders = $query->get();
+
+        return response()->json([
+            'success' => true,
+            'data' => $orders
+        ]);
+    }
+
+    /**
+     * Get seller stats for today (OPTIMIZADO)
+     */
+    public function getSellerTodayStats(Request $request)
+    {
+        $user = $request->user();
+        
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Usuario no autenticado'
+            ], 401);
+        }
+
+        $today = now()->toDateString();
+
+        // Query ultra-optimizada usando agregaciones
+        $stats = Order::where('user_id', $user->id)
+            ->where('source', 'seller')
+            ->whereDate('created_at', $today)
+            ->selectRaw('COUNT(*) as transactions, SUM(total) as revenue')
+            ->first();
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'transactions' => (int) ($stats->transactions ?? 0),
+                'revenue' => (float) ($stats->revenue ?? 0)
+            ]
         ]);
     }
 }

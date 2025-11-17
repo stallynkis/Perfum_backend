@@ -11,8 +11,9 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('orders', function (Blueprint $table) {
-            $table->enum('source', ['web', 'seller'])->default('web')->after('user_id');
+        Schema::table('slides', function (Blueprint $table) {
+            $table->string('buttonAction')->nullable()->after('buttonLink');
+            $table->string('actionValue')->nullable()->after('buttonAction');
         });
     }
 
@@ -21,8 +22,8 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::table('orders', function (Blueprint $table) {
-            $table->dropColumn('source');
+        Schema::table('slides', function (Blueprint $table) {
+            $table->dropColumn(['buttonAction', 'actionValue']);
         });
     }
 };

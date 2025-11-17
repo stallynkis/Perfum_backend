@@ -13,6 +13,7 @@ use App\Http\Controllers\Api\SaleController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\ReniecController;
 use App\Http\Controllers\Api\OrderController;
+use App\Http\Controllers\Api\DocumentVerificationController;
 use App\Http\Controllers\Admin\CategoryController;
 use App\Http\Controllers\Admin\BenefitController;
 use App\Http\Controllers\Admin\BenefitSeederController;
@@ -56,6 +57,19 @@ Route::get('/contact-info', [ContactInfoController::class, 'index']);
 // Consulta RENIEC pública
 Route::get('/reniec/consultar/{dni}', [ReniecController::class, 'consultarDNI']);
 
+// Consulta DNI y RUC para comprobantes
+Route::get('/verify/dni/{dni}', [DocumentVerificationController::class, 'consultarDNI']);
+Route::get('/verify/ruc/{ruc}', [DocumentVerificationController::class, 'consultarRUC']);
+
+// Slides públicos para el carrusel del home
+Route::get('/slides', [SlideController::class, 'publicIndex']);
+
+// Categorías públicas
+Route::get('/categories', [CategoryController::class, 'publicIndex']);
+
+// Beneficios públicos
+Route::get('/benefits', [BenefitController::class, 'publicIndex']);
+
 // ============================================
 // RUTAS PROTEGIDAS (Requieren autenticación)
 // ============================================
@@ -65,6 +79,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/user', [AuthController::class, 'user']);
     Route::put('/user/profile', [AuthController::class, 'updateProfile']);
     Route::post('/logout', [AuthController::class, 'logout']);
+    
+    // ========== Vendedor ==========
+    Route::post('/seller/logout', [AuthController::class, 'sellerLogout']);
 
     // ========== Productos (CRUD completo) ==========
     Route::post('/products', [ProductController::class, 'store']);
@@ -89,6 +106,17 @@ Route::middleware('auth:sanctum')->group(function () {
     // ========== Orders (rutas protegidas) ==========
     Route::get('/orders', [OrderController::class, 'index']);
     Route::get('/orders/customer', [OrderController::class, 'getCustomerOrders']); // Pedidos del cliente autenticado
+    
+    // ========== Seller Orders (OPTIMIZADO) ==========
+    Route::get('/seller/orders', [OrderController::class, 'getSellerOrders']); // Órdenes del vendedor autenticado
+    Route::get('/seller/stats/today', [OrderController::class, 'getSellerTodayStats']); // Estadísticas del día
+    
+    // ========== Seller Customers ==========
+    Route::get('/seller/customers', [App\Http\Controllers\Api\SellerCustomerController::class, 'index']);
+    Route::post('/seller/customers', [App\Http\Controllers\Api\SellerCustomerController::class, 'store']);
+    Route::put('/seller/customers/{id}', [App\Http\Controllers\Api\SellerCustomerController::class, 'update']);
+    Route::delete('/seller/customers/{id}', [App\Http\Controllers\Api\SellerCustomerController::class, 'destroy']);
+    
     Route::get('/orders/{id}', [OrderController::class, 'show']);
     Route::put('/orders/{id}', [OrderController::class, 'update']);
     Route::post('/orders/{id}/confirm-payment', [OrderController::class, 'confirmPayment']);
@@ -148,5 +176,38 @@ Route::middleware('auth:sanctum')->group(function () {
         
         // Estadísticas
         Route::get('stats', [StatsController::class, 'index']);
+        
+        // Reportes de Vendedores
+        Route::get('seller-reports', [\App\Http\Controllers\Admin\SellerReportController::class, 'index']);
+        Route::get('seller-reports/{id}', [\App\Http\Controllers\Admin\SellerReportController::class, 'sellerDetail']);
+    });
+
+    // ========== Cajas Registradoras (Admin) ==========
+    Route::prefix('admin/cash-registers')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Admin\CashRegisterController::class, 'index']);
+        Route::post('/', [\App\Http\Controllers\Admin\CashRegisterController::class, 'store']);
+        Route::get('/{id}', [\App\Http\Controllers\Admin\CashRegisterController::class, 'show']);
+        Route::put('/{id}', [\App\Http\Controllers\Admin\CashRegisterController::class, 'update']);
+        Route::delete('/{id}', [\App\Http\Controllers\Admin\CashRegisterController::class, 'destroy']);
+        
+        // Sesiones
+        Route::get('/{id}/sessions', [\App\Http\Controllers\Admin\CashRegisterController::class, 'getSessions']);
+        Route::get('/{id}/current-session', [\App\Http\Controllers\Admin\CashRegisterController::class, 'getCurrentSession']);
+        Route::post('/sessions/open', [\App\Http\Controllers\Admin\CashRegisterController::class, 'openSession']);
+        Route::put('/sessions/{id}/close', [\App\Http\Controllers\Admin\CashRegisterController::class, 'closeSession']);
+        
+        // Movimientos
+        Route::post('/movements', [\App\Http\Controllers\Admin\CashRegisterController::class, 'addMovement']);
+        Route::get('/sessions/{id}/movements', [\App\Http\Controllers\Admin\CashRegisterController::class, 'getMovements']);
+        Route::get('/movements/date-range', [\App\Http\Controllers\Admin\CashRegisterController::class, 'getMovementsByDateRange']);
+    });
+
+    // ========== Cajas Registradoras (Seller) ==========
+    Route::prefix('seller/cash')->group(function () {
+        Route::get('/my-register', [\App\Http\Controllers\Admin\CashRegisterController::class, 'getSellerRegister']);
+        Route::get('/my-sessions', [\App\Http\Controllers\Admin\CashRegisterController::class, 'getSellerSessions']);
+        Route::post('/open-session', [\App\Http\Controllers\Admin\CashRegisterController::class, 'openSession']);
+        Route::put('/close-session/{id}', [\App\Http\Controllers\Admin\CashRegisterController::class, 'closeSession']);
+        Route::post('/add-movement', [\App\Http\Controllers\Admin\CashRegisterController::class, 'addMovement']);
     });
 });

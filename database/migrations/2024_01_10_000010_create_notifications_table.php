@@ -31,7 +31,6 @@ return new class extends Migration
                 $table->unsignedBigInteger('order_id')->nullable();
                 $table->unsignedBigInteger('user_id')->nullable();
                 $table->unsignedBigInteger('vendor_id')->nullable();
-                $table->unsignedBigInteger('contact_form_id')->nullable();
 
                 $table->json('data')->nullable();
                 $table->timestamps();

@@ -8,6 +8,15 @@ use Illuminate\Http\Request;
 
 class CategoryController extends Controller
 {
+    // Endpoint público para categorías activas
+    public function publicIndex()
+    {
+        $categories = Category::where('is_active', true)
+            ->orderBy('order')
+            ->get();
+        return response()->json(['data' => $categories]);
+    }
+
     public function index()
     {
         $categories = Category::orderBy('order')->get();

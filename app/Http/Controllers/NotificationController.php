@@ -13,9 +13,15 @@ class NotificationController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
+        $user = $request->user();
+        
         $query = Notification::query()
-            ->with(['order', 'user', 'vendor', 'contactForm'])
             ->orderBy('created_at', 'desc');
+
+        // FILTRO CRÍTICO: Si NO es admin, solo sus propias notificaciones
+        if (!$user || $user->role !== 'admin') {
+            $query->where('user_id', $user->id);
+        }
 
         // Filtros opcionales
         if ($request->has('type')) {
@@ -52,8 +58,7 @@ class NotificationController extends Controller
      */
     public function show($id): JsonResponse
     {
-        $notification = Notification::with(['order', 'user', 'vendor', 'contactForm'])
-            ->findOrFail($id);
+        $notification = Notification::findOrFail($id);
 
         return response()->json([
             'success' => true,
@@ -177,11 +182,25 @@ class NotificationController extends Controller
     }
 
     /**
-     * Obtener contador de notificaciones no leídas
+     * Obtener contador de notificaciones no leídas (OPTIMIZADO)
      */
-    public function unreadCount(): JsonResponse
+    public function unreadCount(Request $request): JsonResponse
     {
-        $count = Notification::unread()->count();
+        $user = $request->user();
+        
+        // OPTIMIZACIÓN: Consulta simple sin scopes ni relaciones
+        if (!$user || $user->role !== 'admin') {
+            // Para usuarios normales, contar SOLO sus notificaciones
+            $count = \DB::table('notifications')
+                ->where('user_id', $user->id)
+                ->where('read', false)
+                ->count();
+        } else {
+            // Para admin, contar todas las no leídas
+            $count = \DB::table('notifications')
+                ->where('read', false)
+                ->count();
+        }
 
         return response()->json([
             'success' => true,

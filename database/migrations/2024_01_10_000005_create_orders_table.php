@@ -42,13 +42,13 @@ return new class extends Migration
             $table->decimal('total', 10, 2);
             
             // Payment Information
-            $table->enum('payment_method', ['paypal', 'yape', 'cash', 'card', 'transfer'])->default('paypal');
+            $table->string('payment_method')->default('paypal');
             $table->string('transaction_id')->nullable();
             $table->string('approval_code')->nullable(); // For Yape
-            $table->enum('payment_status', ['pending', 'paid', 'failed', 'refunded'])->default('pending');
+            $table->string('payment_status')->default('pending');
             
             // Order Status
-            $table->enum('status', ['pending', 'processing', 'shipped', 'delivered', 'cancelled'])->default('pending');
+            $table->string('status')->default('pending');
             
             // Additional Information
             $table->text('notes')->nullable();
