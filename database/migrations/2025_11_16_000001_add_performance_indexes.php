@@ -46,47 +46,54 @@ return new class extends Migration
                 }
             });
         } else {
-            // Para MySQL/PostgreSQL, verificar si el índice existe antes de crearlo
-            $sm = $connection->getDoctrineSchemaManager();
-            
-            // Índices para notifications
-            Schema::table('notifications', function (Blueprint $table) use ($sm) {
-                $indexes = $sm->listTableIndexes('notifications');
-                $indexNames = array_keys($indexes);
-                
-                if (!in_array('notifications_created_at_index', $indexNames)) {
+            // Para MySQL/PostgreSQL, usar try-catch para evitar errores de índices duplicados
+            try {
+                Schema::table('notifications', function (Blueprint $table) {
                     $table->index('created_at');
-                }
-                if (!in_array('notifications_user_id_read_index', $indexNames)) {
+                });
+            } catch (\Exception $e) {
+                // Índice ya existe, continuar
+            }
+            
+            try {
+                Schema::table('notifications', function (Blueprint $table) {
                     $table->index(['user_id', 'read']);
-                }
-                if (!in_array('notifications_user_id_created_at_index', $indexNames)) {
+                });
+            } catch (\Exception $e) {
+                // Índice ya existe, continuar
+            }
+            
+            try {
+                Schema::table('notifications', function (Blueprint $table) {
                     $table->index(['user_id', 'created_at']);
-                }
-            });
+                });
+            } catch (\Exception $e) {
+                // Índice ya existe, continuar
+            }
 
-            // Índices para users
-            Schema::table('users', function (Blueprint $table) use ($sm) {
-                $indexes = $sm->listTableIndexes('users');
-                $indexNames = array_keys($indexes);
-                
-                if (!in_array('users_role_index', $indexNames)) {
+            try {
+                Schema::table('users', function (Blueprint $table) {
                     $table->index('role');
-                }
-            });
+                });
+            } catch (\Exception $e) {
+                // Índice ya existe, continuar
+            }
 
-            // Índices para products
-            Schema::table('products', function (Blueprint $table) use ($sm) {
-                $indexes = $sm->listTableIndexes('products');
-                $indexNames = array_keys($indexes);
-                
-                if (!in_array('products_featured_index', $indexNames)) {
+            try {
+                Schema::table('products', function (Blueprint $table) {
                     $table->index('featured');
-                }
-                if (!in_array('products_status_featured_index', $indexNames)) {
+                });
+            } catch (\Exception $e) {
+                // Índice ya existe, continuar
+            }
+            
+            try {
+                Schema::table('products', function (Blueprint $table) {
                     $table->index(['status', 'featured']);
-                }
-            });
+                });
+            } catch (\Exception $e) {
+                // Índice ya existe, continuar
+            }
         }
     }
 
