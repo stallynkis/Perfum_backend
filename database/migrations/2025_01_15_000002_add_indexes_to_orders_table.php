@@ -11,17 +11,37 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('orders', function (Blueprint $table) {
-            // Índice compuesto para consultas de vendedor
-            $table->index(['user_id', 'source', 'created_at'], 'idx_seller_orders');
-            
-            // Índice para búsqueda por fecha
-            $table->index('created_at', 'idx_created_at');
-            
-            // Índice para filtros de estado
-            $table->index('status', 'idx_status');
-            $table->index('payment_status', 'idx_payment_status');
-        });
+        // Verificar si la tabla existe antes de agregar índices
+        if (Schema::hasTable('orders')) {
+            Schema::table('orders', function (Blueprint $table) {
+                // Índice compuesto para consultas de vendedor
+                try {
+                    $table->index(['user_id', 'source', 'created_at'], 'idx_seller_orders');
+                } catch (\Exception $e) {
+                    // Índice ya existe
+                }
+                
+                // Índice para búsqueda por fecha
+                try {
+                    $table->index('created_at', 'idx_created_at');
+                } catch (\Exception $e) {
+                    // Índice ya existe
+                }
+                
+                // Índice para filtros de estado
+                try {
+                    $table->index('status', 'idx_status');
+                } catch (\Exception $e) {
+                    // Índice ya existe
+                }
+                
+                try {
+                    $table->index('payment_status', 'idx_payment_status');
+                } catch (\Exception $e) {
+                    // Índice ya existe
+                }
+            });
+        }
     }
 
     /**
