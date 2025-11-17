@@ -78,11 +78,11 @@ class BrandController extends Controller
         }
 
         $validator = Validator::make($request->all(), [
-            'name' => 'required|string|max:255|unique:brands,name,' . $id,
+            'name' => 'sometimes|string|max:255|unique:brands,name,' . $id,
             'description' => 'nullable|string',
             'image' => 'nullable|string',
-            'is_active' => 'boolean',
-            'order' => 'integer',
+            'is_active' => 'nullable|boolean',
+            'order' => 'nullable|integer',
         ]);
 
         if ($validator->fails()) {

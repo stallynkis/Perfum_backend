@@ -54,20 +54,27 @@ class CategoryController extends Controller
 
     public function update(Request $request, Category $category)
     {
-        $validated = $request->validate([
-            'name' => 'string|max:255',
-            'description' => 'string',
-            'image' => 'string',
-            'order' => 'integer',
-            'is_active' => 'boolean'
-        ]);
+        try {
+            $validated = $request->validate([
+                'name' => 'sometimes|string|max:255',
+                'description' => 'nullable|string',
+                'image' => 'nullable|string',
+                'order' => 'nullable|integer',
+                'is_active' => 'nullable|boolean'
+            ]);
 
-        $category->update($validated);
+            $category->update($validated);
 
-        return response()->json([
-            'category' => $category,
-            'message' => 'Categoría actualizada exitosamente'
-        ]);
+            return response()->json([
+                'category' => $category,
+                'message' => 'Categoría actualizada exitosamente'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Error al actualizar categoría',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 
     public function destroy(Category $category)

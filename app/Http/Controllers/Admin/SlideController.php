@@ -52,24 +52,31 @@ class SlideController extends Controller
 
     public function update(Request $request, Slide $slide)
     {
-        $validated = $request->validate([
-            'image' => 'string',
-            'title' => 'string|max:255',
-            'subtitle' => 'nullable|string',
-            'buttonText' => 'nullable|string',
-            'buttonLink' => 'nullable|string',
-            'buttonAction' => 'nullable|string|in:navigate,modal,external',
-            'actionValue' => 'nullable|string',
-            'order' => 'integer',
-            'isActive' => 'boolean'
-        ]);
+        try {
+            $validated = $request->validate([
+                'image' => 'sometimes|string',
+                'title' => 'sometimes|string|max:255',
+                'subtitle' => 'nullable|string',
+                'buttonText' => 'nullable|string',
+                'buttonLink' => 'nullable|string',
+                'buttonAction' => 'nullable|string|in:navigate,modal,external',
+                'actionValue' => 'nullable|string',
+                'order' => 'nullable|integer',
+                'isActive' => 'nullable|boolean'
+            ]);
 
-        $slide->update($validated);
+            $slide->update($validated);
 
-        return response()->json([
-            'slide' => $slide,
-            'message' => 'Slide actualizado exitosamente'
-        ]);
+            return response()->json([
+                'slide' => $slide,
+                'message' => 'Slide actualizado exitosamente'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Error al actualizar slide',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 
     public function destroy(Slide $slide)

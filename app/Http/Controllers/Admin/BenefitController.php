@@ -54,20 +54,27 @@ class BenefitController extends Controller
 
     public function update(Request $request, Benefit $benefit)
     {
-        $validated = $request->validate([
-            'title' => 'string|max:255',
-            'description' => 'string',
-            'icon' => 'string',
-            'order' => 'integer',
-            'is_active' => 'boolean'
-        ]);
+        try {
+            $validated = $request->validate([
+                'title' => 'sometimes|string|max:255',
+                'description' => 'nullable|string',
+                'icon' => 'nullable|string',
+                'order' => 'nullable|integer',
+                'is_active' => 'nullable|boolean'
+            ]);
 
-        $benefit->update($validated);
+            $benefit->update($validated);
 
-        return response()->json([
-            'benefit' => $benefit,
-            'message' => 'Beneficio actualizado exitosamente'
-        ]);
+            return response()->json([
+                'benefit' => $benefit,
+                'message' => 'Beneficio actualizado exitosamente'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Error al actualizar beneficio',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 
     public function destroy(Benefit $benefit)
