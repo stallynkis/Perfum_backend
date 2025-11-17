@@ -14,11 +14,13 @@ return new class extends Migration
         // Verificar si la tabla existe antes de agregar índices
         if (Schema::hasTable('orders')) {
             Schema::table('orders', function (Blueprint $table) {
-                // Índice compuesto para consultas de vendedor
-                try {
-                    $table->index(['user_id', 'source', 'created_at'], 'idx_seller_orders');
-                } catch (\Exception $e) {
-                    // Índice ya existe
+                // Índice compuesto para consultas de vendedor (solo si source existe)
+                if (Schema::hasColumn('orders', 'source')) {
+                    try {
+                        $table->index(['user_id', 'source', 'created_at'], 'idx_seller_orders');
+                    } catch (\Exception $e) {
+                        // Índice ya existe
+                    }
                 }
                 
                 // Índice para búsqueda por fecha

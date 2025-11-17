@@ -15,6 +15,7 @@ return new class extends Migration
             $table->id();
             $table->string('order_number')->unique();
             $table->foreignId('user_id')->nullable()->constrained()->onDelete('set null');
+            $table->string('source', 10)->default('web'); // web o seller
             
             // Customer information
             $table->string('customer_name');
