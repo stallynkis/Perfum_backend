@@ -40,6 +40,8 @@ class BrandController extends Controller
     public function store(Request $request)
     {
         \Log::info('BrandController@store request', ['request' => $request->all()]);
+        
+        $validator = Validator::make($request->all(), [
             'name' => 'required|string|max:255|unique:brands',
             'description' => 'nullable|string',
             'image' => 'nullable|string',
@@ -82,7 +84,7 @@ class BrandController extends Controller
             return response()->json(['message' => 'Marca no encontrada'], 404);
         }
 
-        // ...existing code...
+        $validator = Validator::make($request->all(), [
             'name' => 'sometimes|string|max:255|unique:brands,name,' . $id,
             'description' => 'nullable|string',
             'image' => 'nullable|string',
@@ -112,7 +114,6 @@ class BrandController extends Controller
             ], 500);
         }
     }
-        $validator = Validator::make($request->all(), [
 
     // Eliminar marca
     public function destroy($id)

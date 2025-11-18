@@ -22,13 +22,17 @@ class ProductManagementController extends Controller
      */
     public function store(Request $request)
     {
+        \Log::info('ProductManagementController@store - Request received', ['data' => $request->all()]);
+        
         try {
             $validated = $request->validate([
                 'name' => 'required|string|max:255',
                 'description' => 'nullable|string',
                 'price' => 'required|numeric|min:0',
                 'stock' => 'nullable|integer|min:0',
-                'category' => 'required|string|max:255',
+                'category_id' => 'nullable|exists:categories,id',
+                'brand_id' => 'nullable|exists:brands,id',
+                'category' => 'nullable|string|max:255',
                 'brand' => 'nullable|string|max:255',
                 'image' => 'nullable|string',
                 'rating' => 'nullable|numeric|between:0,5',
@@ -38,6 +42,8 @@ class ProductManagementController extends Controller
                 'is_featured' => 'nullable|boolean',
             ]);
 
+            \Log::info('ProductManagementController@store - Validation passed', ['validated' => $validated]);
+
             // Valores por defecto
             $validated['is_active'] = true;
             $validated['is_featured'] = $validated['is_featured'] ?? false;
@@ -46,11 +52,14 @@ class ProductManagementController extends Controller
 
             $product = Product::create($validated);
 
+            \Log::info('ProductManagementController@store - Product created', ['product' => $product]);
+
             return response()->json([
                 'product' => $product,
                 'message' => 'Producto creado exitosamente'
             ], 201);
         } catch (\Illuminate\Validation\ValidationException $e) {
+            \Log::warning('ProductManagementController@store - Validation failed', ['errors' => $e->errors()]);
             return response()->json([
                 'message' => 'Error de validación',
                 'errors' => $e->errors()
