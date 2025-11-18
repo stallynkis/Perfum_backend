@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Product;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Validator;
 
 class ProductManagementController extends Controller
 {
@@ -22,57 +23,51 @@ class ProductManagementController extends Controller
      */
     public function store(Request $request)
     {
-        \Log::info('ProductManagementController@store - Request received', ['data' => $request->all()]);
+        \Log::info('ProductManagementController@store request', ['request' => $request->all()]);
         
-        try {
-            $validated = $request->validate([
-                'name' => 'required|string|max:255',
-                'description' => 'nullable|string',
-                'price' => 'required|numeric|min:0',
-                'stock' => 'required|integer|min:0',
-                'category' => 'required|string|max:255',
-                'brand' => 'nullable|string|max:255',
-                'image' => 'nullable|string',
-                'rating' => 'nullable|numeric|between:0,5',
-                'original_price' => 'nullable|numeric|min:0',
-                'notes' => 'nullable|string',
-                'is_active' => 'nullable|boolean',
-                'is_featured' => 'nullable|boolean',
-            ]);
+        $validator = Validator::make($request->all(), [
+            'name' => 'required|string|max:255',
+            'description' => 'nullable|string',
+            'price' => 'required|numeric|min:0',
+            'stock' => 'required|integer|min:0',
+            'category' => 'required|string|max:255',
+            'brand' => 'nullable|string|max:255',
+            'image' => 'nullable|string',
+            'rating' => 'nullable|numeric|between:0,5',
+            'original_price' => 'nullable|numeric|min:0',
+            'notes' => 'nullable|string',
+            'is_active' => 'nullable|boolean',
+            'is_featured' => 'nullable|boolean',
+        ]);
 
-            \Log::info('ProductManagementController@store - Validation passed', ['validated' => $validated]);
-
-            // Valores por defecto
-            $validated['is_active'] = $validated['is_active'] ?? true;
-            $validated['is_featured'] = $validated['is_featured'] ?? false;
-            $validated['rating'] = $validated['rating'] ?? 4.5;
-            $validated['brand'] = $validated['brand'] ?? 'Sin marca';
-            $validated['description'] = $validated['description'] ?? '';
-
-            $product = Product::create($validated);
-
-            \Log::info('ProductManagementController@store - Product created', ['product' => $product]);
-
-            return response()->json([
-                'product' => $product,
-                'message' => 'Producto creado exitosamente'
-            ], 201);
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            \Log::warning('ProductManagementController@store - Validation failed', ['errors' => $e->errors()]);
+        if ($validator->fails()) {
+            \Log::warning('ProductManagementController@store validation failed', ['errors' => $validator->errors()]);
             return response()->json([
                 'message' => 'Error de validación',
-                'errors' => $e->errors()
+                'errors' => $validator->errors()
             ], 422);
-        } catch (\Exception $e) {
-            \Log::error('Error al crear producto (Admin): ' . $e->getMessage(), [
-                'request' => $request->all(),
-                'trace' => $e->getTraceAsString()
-            ]);
+        }
+
+        try {
+            $data = $request->all();
+            $data['is_active'] = $data['is_active'] ?? true;
+            $data['is_featured'] = $data['is_featured'] ?? false;
+            $data['rating'] = $data['rating'] ?? 4.5;
+            $data['brand'] = $data['brand'] ?? 'Sin marca';
+            $data['description'] = $data['description'] ?? '';
+            
+            $product = Product::create($data);
+            \Log::info('ProductManagementController@store success', ['product' => $product]);
             
             return response()->json([
+                'message' => 'Producto creado exitosamente',
+                'product' => $product
+            ], 201);
+        } catch (\Exception $e) {
+            \Log::error('ProductManagementController@store error', ['error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
+            return response()->json([
                 'message' => 'Error al crear producto',
-                'error' => $e->getMessage(),
-                'details' => config('app.debug') ? $e->getTraceAsString() : null
+                'error' => $e->getMessage()
             ], 500);
         }
     }
@@ -93,14 +88,7 @@ class ProductManagementController extends Controller
     {
         $product = Product::findOrFail($id);
 
-        // Log para debug
-        \Log::info('📥 Datos recibidos para actualizar producto:', [
-            'id' => $id,
-            'request_all' => $request->all(),
-            'is_featured' => $request->input('is_featured'),
-        ]);
-
-        $validated = $request->validate([
+        $validator = Validator::make($request->all(), [
             'name' => 'sometimes|required|string|max:255',
             'description' => 'sometimes|nullable|string',
             'price' => 'sometimes|required|numeric|min:0',
@@ -115,21 +103,28 @@ class ProductManagementController extends Controller
             'is_featured' => 'sometimes|boolean',
         ]);
 
-        \Log::info('✅ Datos validados:', $validated);
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => 'Error de validación',
+                'errors' => $validator->errors()
+            ], 422);
+        }
 
-        $validated['is_active'] = true;
-        $product->update($validated);
-
-        \Log::info('💾 Producto guardado en BD:', [
-            'id' => $product->id,
-            'is_featured' => $product->is_featured,
-            'is_active' => $product->is_active,
-        ]);
-
-        return response()->json([
-            'product' => $product,
-            'message' => 'Producto actualizado exitosamente'
-        ]);
+        try {
+            $data = $request->all();
+            $data['is_active'] = true;
+            $product->update($data);
+            
+            return response()->json([
+                'message' => 'Producto actualizado exitosamente',
+                'product' => $product
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Error al actualizar producto',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 
     /**
@@ -137,11 +132,18 @@ class ProductManagementController extends Controller
      */
     public function destroy(string $id)
     {
-        $product = Product::findOrFail($id);
-        $product->delete();
+        try {
+            $product = Product::findOrFail($id);
+            $product->delete();
 
-        return response()->json([
-            'message' => 'Producto eliminado exitosamente'
-        ]);
+            return response()->json([
+                'message' => 'Producto eliminado exitosamente'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Error al eliminar producto',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 }

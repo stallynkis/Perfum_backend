@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Category;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Validator;
 
 class CategoryController extends Controller
 {
@@ -25,48 +26,38 @@ class CategoryController extends Controller
 
     public function store(Request $request)
     {
-        \Log::info('🔵 CategoryController@store - INICIO', [
-            'request_all' => $request->all(),
-            'headers' => $request->headers->all(),
-            'user' => $request->user() ? $request->user()->id : 'NO AUTH'
-        ]);
+        \Log::info('CategoryController@store request', ['request' => $request->all()]);
         
-        try {
-            $validated = $request->validate([
-                'name' => 'required|string|max:255',
-                'description' => 'nullable|string',
-                'image' => 'nullable|string',
-                'order' => 'nullable|integer',
-                'is_active' => 'nullable|boolean'
-            ]);
+        $validator = Validator::make($request->all(), [
+            'name' => 'required|string|max:255',
+            'description' => 'nullable|string',
+            'image' => 'nullable|string',
+            'is_active' => 'nullable|boolean',
+            'order' => 'nullable|integer',
+        ]);
 
-            \Log::info('✅ CategoryController@store - Validation passed', ['validated' => $validated]);
-
-            // Establecer valores por defecto
-            $validated['description'] = $validated['description'] ?? '';
-            $validated['image'] = $validated['image'] ?? null;
-            $validated['order'] = $validated['order'] ?? (Category::max('order') ?? 0) + 1;
-            $validated['is_active'] = $validated['is_active'] ?? true;
-
-            $category = Category::create($validated);
-
-            \Log::info('CategoryController@store - Category created', ['category' => $category]);
-
-            return response()->json([
-                'category' => $category,
-                'message' => 'Categoría creada exitosamente'
-            ], 201);
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            \Log::warning('CategoryController@store - Validation failed', ['errors' => $e->errors()]);
+        if ($validator->fails()) {
+            \Log::warning('CategoryController@store validation failed', ['errors' => $validator->errors()]);
             return response()->json([
                 'message' => 'Error de validación',
-                'errors' => $e->errors()
+                'errors' => $validator->errors()
             ], 422);
+        }
+
+        try {
+            $data = $request->all();
+            $data['is_active'] = $data['is_active'] ?? true;
+            $data['description'] = $data['description'] ?? '';
+            $data['image'] = $data['image'] ?? null;
+            $data['order'] = $data['order'] ?? (Category::max('order') ?? 0) + 1;
+            $category = Category::create($data);
+            \Log::info('CategoryController@store success', ['category' => $category]);
+            return response()->json([
+                'message' => 'Categoría creada exitosamente',
+                'category' => $category
+            ], 201);
         } catch (\Exception $e) {
-            \Log::error('CategoryController@store - Error', [
-                'message' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
+            \Log::error('CategoryController@store error', ['error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
             return response()->json([
                 'message' => 'Error al crear categoría',
                 'error' => $e->getMessage()
@@ -81,21 +72,28 @@ class CategoryController extends Controller
 
     public function update(Request $request, Category $category)
     {
-        try {
-            $validated = $request->validate([
-                'name' => 'sometimes|string|max:255',
-                'description' => 'nullable|string',
-                'image' => 'nullable|string',
-                'order' => 'nullable|integer',
-                'is_active' => 'nullable|boolean'
-            ]);
+        $validator = Validator::make($request->all(), [
+            'name' => 'sometimes|string|max:255',
+            'description' => 'nullable|string',
+            'image' => 'nullable|string',
+            'is_active' => 'nullable|boolean',
+            'order' => 'nullable|integer',
+        ]);
 
-            $validated['is_active'] = true;
-            $category->update($validated);
-
+        if ($validator->fails()) {
             return response()->json([
-                'category' => $category,
-                'message' => 'Categoría actualizada exitosamente'
+                'message' => 'Error de validación',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        try {
+            $data = $request->all();
+            $data['is_active'] = true;
+            $category->update($data);
+            return response()->json([
+                'message' => 'Categoría actualizada exitosamente',
+                'category' => $category
             ]);
         } catch (\Exception $e) {
             return response()->json([
@@ -107,10 +105,16 @@ class CategoryController extends Controller
 
     public function destroy(Category $category)
     {
-        $category->delete();
-
-        return response()->json([
-            'message' => 'Categoría eliminada exitosamente'
-        ]);
+        try {
+            $category->delete();
+            return response()->json([
+                'message' => 'Categoría eliminada exitosamente'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Error al eliminar categoría',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 }
