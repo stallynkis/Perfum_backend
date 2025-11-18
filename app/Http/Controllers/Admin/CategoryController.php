@@ -26,40 +26,55 @@ class CategoryController extends Controller
 
     public function store(Request $request)
     {
-        \Log::info('CategoryController@store request', ['request' => $request->all()]);
-        
-        $validator = Validator::make($request->all(), [
-            'name' => 'required|string|max:255',
-            'description' => 'nullable|string',
-            'image' => 'nullable|string',
-            'is_active' => 'nullable|boolean',
-            'order' => 'nullable|integer',
-        ]);
-
-        if ($validator->fails()) {
-            \Log::warning('CategoryController@store validation failed', ['errors' => $validator->errors()]);
-            return response()->json([
-                'message' => 'Error de validación',
-                'errors' => $validator->errors()
-            ], 422);
-        }
-
         try {
+            \Log::info('CategoryController@store - Inicio', [
+                'name' => $request->input('name'),
+                'has_image' => !empty($request->input('image')),
+                'image_length' => $request->input('image') ? strlen($request->input('image')) : 0
+            ]);
+            
+            $validator = Validator::make($request->all(), [
+                'name' => 'required|string|max:255',
+                'description' => 'nullable|string',
+                'image' => 'nullable|string|max:16777215', // Tamaño máximo MEDIUMTEXT
+                'is_active' => 'nullable|boolean',
+                'order' => 'nullable|integer',
+            ]);
+
+            if ($validator->fails()) {
+                \Log::warning('CategoryController@store - Validación falló', ['errors' => $validator->errors()]);
+                return response()->json([
+                    'message' => 'Error de validación',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
             $data = $request->all();
             $data['is_active'] = $data['is_active'] ?? true;
             $data['description'] = $data['description'] ?? '';
             $data['image'] = $data['image'] ?? null;
             $data['order'] = $data['order'] ?? (Category::max('order') ?? 0) + 1;
+            
+            \Log::info('CategoryController@store - Creando categoría', ['data' => array_merge($data, ['image' => 'OMITTED'])]);
+            
             $category = Category::create($data);
-            \Log::info('CategoryController@store success', ['category' => $category]);
+            
+            \Log::info('CategoryController@store - Categoría creada', ['category_id' => $category->id]);
+            
             return response()->json([
                 'message' => 'Categoría creada exitosamente',
                 'category' => $category
             ], 201);
         } catch (\Exception $e) {
-            \Log::error('CategoryController@store error', ['error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
+            \Log::error('CategoryController@store - Error', [
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
             return response()->json([
-                'message' => 'Error al crear categoría',
+                'message' => 'Error al crear categoría: ' . $e->getMessage(),
                 'error' => $e->getMessage()
             ], 500);
         }

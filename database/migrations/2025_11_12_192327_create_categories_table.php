@@ -15,7 +15,7 @@ return new class extends Migration
             $table->id();
             $table->string('name');
             $table->text('description')->nullable();
-            $table->string('image')->nullable();
+            $table->mediumText('image')->nullable(); // Cambiado a mediumText para soportar base64
             $table->integer('order')->default(1);
             $table->boolean('is_active')->default(true);
             $table->timestamps();

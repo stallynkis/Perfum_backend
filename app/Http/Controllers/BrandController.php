@@ -39,40 +39,55 @@ class BrandController extends Controller
     // Crear nueva marca
     public function store(Request $request)
     {
-        \Log::info('BrandController@store request', ['request' => $request->all()]);
-        
-        $validator = Validator::make($request->all(), [
-            'name' => 'required|string|max:255|unique:brands',
-            'description' => 'nullable|string',
-            'image' => 'nullable|string',
-            'is_active' => 'nullable|boolean',
-            'order' => 'nullable|integer',
-        ]);
-
-        if ($validator->fails()) {
-            \Log::warning('BrandController@store validation failed', ['errors' => $validator->errors()]);
-            return response()->json([
-                'message' => 'Error de validación',
-                'errors' => $validator->errors()
-            ], 422);
-        }
-
         try {
+            \Log::info('BrandController@store - Inicio', [
+                'name' => $request->input('name'),
+                'has_image' => !empty($request->input('image')),
+                'image_length' => $request->input('image') ? strlen($request->input('image')) : 0
+            ]);
+            
+            $validator = Validator::make($request->all(), [
+                'name' => 'required|string|max:255|unique:brands',
+                'description' => 'nullable|string',
+                'image' => 'nullable|string|max:16777215', // Tamaño máximo MEDIUMTEXT
+                'is_active' => 'nullable|boolean',
+                'order' => 'nullable|integer',
+            ]);
+
+            if ($validator->fails()) {
+                \Log::warning('BrandController@store - Validación falló', ['errors' => $validator->errors()]);
+                return response()->json([
+                    'message' => 'Error de validación',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
             $data = $request->all();
             $data['is_active'] = $data['is_active'] ?? true;
             $data['description'] = $data['description'] ?? '';
             $data['image'] = $data['image'] ?? null;
             $data['order'] = $data['order'] ?? (Brand::max('order') ?? 0) + 1;
+            
+            \Log::info('BrandController@store - Creando marca', ['data' => array_merge($data, ['image' => 'OMITTED'])]);
+            
             $brand = Brand::create($data);
-            \Log::info('BrandController@store success', ['brand' => $brand]);
+            
+            \Log::info('BrandController@store - Marca creada', ['brand_id' => $brand->id]);
+            
             return response()->json([
                 'message' => 'Marca creada exitosamente',
                 'brand' => $brand
             ], 201);
         } catch (\Exception $e) {
-            \Log::error('BrandController@store error', ['error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
+            \Log::error('BrandController@store - Error', [
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
             return response()->json([
-                'message' => 'Error al crear marca',
+                'message' => 'Error al crear marca: ' . $e->getMessage(),
                 'error' => $e->getMessage()
             ], 500);
         }
