@@ -25,24 +25,47 @@ class SlideController extends Controller
 
     public function store(Request $request)
     {
-        $validated = $request->validate([
-            'image' => 'required|string',
-            'title' => 'required|string|max:255',
-            'subtitle' => 'nullable|string',
-            'buttonText' => 'nullable|string',
-            'buttonLink' => 'nullable|string',
-            'buttonAction' => 'nullable|string|in:navigate,modal,external',
-            'actionValue' => 'nullable|string',
-            'order' => 'integer',
-            'isActive' => 'boolean'
-        ]);
+        try {
+            \Log::info('📸 Intentando crear slide', [
+                'has_image' => $request->has('image'),
+                'image_length' => $request->has('image') ? strlen($request->image) : 0,
+                'title' => $request->title
+            ]);
 
-        $slide = Slide::create($validated);
+            $validated = $request->validate([
+                'image' => 'required|string|max:16777215', // MEDIUMTEXT max
+                'title' => 'required|string|max:255',
+                'subtitle' => 'nullable|string',
+                'buttonText' => 'nullable|string',
+                'buttonLink' => 'nullable|string',
+                'buttonAction' => 'nullable|string|in:navigate,modal,external',
+                'actionValue' => 'nullable|string',
+                'order' => 'integer',
+                'isActive' => 'boolean'
+            ]);
 
-        return response()->json([
-            'slide' => $slide,
-            'message' => 'Slide creado exitosamente'
-        ], 201);
+            $slide = Slide::create($validated);
+
+            \Log::info('✅ Slide creado exitosamente', ['slide_id' => $slide->id]);
+
+            return response()->json([
+                'slide' => $slide,
+                'message' => 'Slide creado exitosamente'
+            ], 201);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            \Log::error('❌ Error de validación creando slide', [
+                'errors' => $e->errors()
+            ]);
+            throw $e;
+        } catch (\Exception $e) {
+            \Log::error('❌ Error creando slide', [
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            return response()->json([
+                'message' => 'Error al crear slide: ' . $e->getMessage()
+            ], 500);
+        }
     }
 
     public function show(Slide $slide)
