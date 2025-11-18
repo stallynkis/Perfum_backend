@@ -12,6 +12,9 @@ class Purchase extends Model
         'unit_cost',
         'total_cost',
         'supplier',
+        'supplier_ruc',
+        'supplier_phone',
+        'supplier_email',
         'invoice_number',
         'notes',
         'purchase_date'

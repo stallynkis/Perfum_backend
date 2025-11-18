@@ -191,7 +191,7 @@ class OrderController extends Controller
                         $customerDocument = null;
                     }
                     
-                    // Verificar si el cliente ya existe para este vendedor
+                    // 1️⃣ GUARDAR EN SELLER_CUSTOMERS (vendedor específico)
                     $existingCustomer = \App\Models\SellerCustomer::where('seller_id', $order->user_id)
                         ->where(function($query) use ($customerDocument, $request) {
                             if ($customerDocument) {
@@ -203,7 +203,6 @@ class OrderController extends Controller
                         ->first();
 
                     if (!$existingCustomer) {
-                        // Crear nuevo cliente solo si tiene datos relevantes
                         if ($customerDocument || $request->customer_phone || $request->customer_email) {
                             \App\Models\SellerCustomer::create([
                                 'seller_id' => $order->user_id,
@@ -215,7 +214,6 @@ class OrderController extends Controller
                             ]);
                         }
                     } else {
-                        // Actualizar datos si están vacíos
                         $updateData = [];
                         if (!$existingCustomer->document && $customerDocument) {
                             $updateData['document'] = $customerDocument;
@@ -233,9 +231,45 @@ class OrderController extends Controller
                             $existingCustomer->update($updateData);
                         }
                     }
+
+                    // 2️⃣ GUARDAR EN BUSINESS_PARTNERS (global - Socios de Negocio)
+                    if ($customerDocument) {
+                        $existingPartner = \App\Models\BusinessPartner::where('ruc', $customerDocument)
+                            ->where('type', 'customer')
+                            ->first();
+
+                        if (!$existingPartner) {
+                            \App\Models\BusinessPartner::create([
+                                'name' => $request->customer_name,
+                                'type' => 'customer',
+                                'ruc' => $customerDocument,
+                                'phone' => $request->customer_phone ?: null,
+                                'email' => $request->customer_email ?: null,
+                                'address' => $request->shipping_address ?: null,
+                                'is_active' => true,
+                                'notes' => 'Auto-creado desde venta #' . $orderNumber
+                            ]);
+                            \Log::info('✅ Cliente guardado en Business Partners', ['ruc' => $customerDocument, 'name' => $request->customer_name]);
+                        } else {
+                            // Actualizar datos si están vacíos
+                            $updatePartner = [];
+                            if (!$existingPartner->phone && $request->customer_phone) {
+                                $updatePartner['phone'] = $request->customer_phone;
+                            }
+                            if (!$existingPartner->email && $request->customer_email) {
+                                $updatePartner['email'] = $request->customer_email;
+                            }
+                            if (!$existingPartner->address && $request->shipping_address) {
+                                $updatePartner['address'] = $request->shipping_address;
+                            }
+                            if (!empty($updatePartner)) {
+                                $existingPartner->update($updatePartner);
+                                \Log::info('🔄 Cliente actualizado en Business Partners', ['ruc' => $customerDocument]);
+                            }
+                        }
+                    }
                 } catch (\Exception $e) {
-                    // Log el error pero continuar con la orden
-                    \Log::warning('Error guardando cliente del vendedor: ' . $e->getMessage());
+                    \Log::warning('⚠️ Error guardando cliente: ' . $e->getMessage());
                 }
             }
 

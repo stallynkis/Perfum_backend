@@ -40,6 +40,9 @@ class PurchaseController extends Controller
             'quantity' => 'required|integer|min:1',
             'unit_cost' => 'required|numeric|min:0',
             'supplier' => 'nullable|string|max:255',
+            'supplier_ruc' => 'nullable|string|max:20',
+            'supplier_phone' => 'nullable|string|max:20',
+            'supplier_email' => 'nullable|email|max:255',
             'invoice_number' => 'nullable|string|max:255',
             'notes' => 'nullable|string',
             'purchase_date' => 'required|date'
@@ -49,6 +52,54 @@ class PurchaseController extends Controller
 
         $purchase = Purchase::create($validated);
         $purchase->load('product');
+
+        // 🏭 AUTO-GUARDAR PROVEEDOR en Business Partners
+        if (!empty($validated['supplier']) && $validated['supplier'] !== 'PROVEEDOR GENÉRICO') {
+            try {
+                $supplierRuc = $validated['supplier_ruc'] ?? null;
+                
+                // Buscar si ya existe el proveedor
+                $existingSupplier = null;
+                if ($supplierRuc) {
+                    $existingSupplier = \App\Models\BusinessPartner::where('ruc', $supplierRuc)
+                        ->where('type', 'supplier')
+                        ->first();
+                } else {
+                    $existingSupplier = \App\Models\BusinessPartner::where('name', $validated['supplier'])
+                        ->where('type', 'supplier')
+                        ->first();
+                }
+
+                if (!$existingSupplier) {
+                    // Crear nuevo proveedor
+                    \App\Models\BusinessPartner::create([
+                        'name' => $validated['supplier'],
+                        'type' => 'supplier',
+                        'ruc' => $supplierRuc,
+                        'phone' => $validated['supplier_phone'] ?? null,
+                        'email' => $validated['supplier_email'] ?? null,
+                        'is_active' => true,
+                        'notes' => 'Auto-creado desde compra #' . ($validated['invoice_number'] ?? 'S/N')
+                    ]);
+                    \Log::info('✅ Proveedor guardado automáticamente', ['name' => $validated['supplier'], 'ruc' => $supplierRuc]);
+                } else {
+                    // Actualizar datos si están vacíos
+                    $updateData = [];
+                    if (!$existingSupplier->phone && isset($validated['supplier_phone'])) {
+                        $updateData['phone'] = $validated['supplier_phone'];
+                    }
+                    if (!$existingSupplier->email && isset($validated['supplier_email'])) {
+                        $updateData['email'] = $validated['supplier_email'];
+                    }
+                    if (!empty($updateData)) {
+                        $existingSupplier->update($updateData);
+                        \Log::info('🔄 Proveedor actualizado', ['name' => $validated['supplier']]);
+                    }
+                }
+            } catch (\Exception $e) {
+                \Log::warning('⚠️ Error guardando proveedor automáticamente: ' . $e->getMessage());
+            }
+        }
 
         return response()->json([
             'message' => 'Compra registrada exitosamente',
