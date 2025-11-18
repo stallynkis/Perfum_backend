@@ -39,7 +39,7 @@ class BrandController extends Controller
     // Crear nueva marca
     public function store(Request $request)
     {
-        $validator = Validator::make($request->all(), [
+        \Log::info('BrandController@store request', ['request' => $request->all()]);
             'name' => 'required|string|max:255|unique:brands',
             'description' => 'nullable|string',
             'image' => 'nullable|string',
@@ -48,21 +48,26 @@ class BrandController extends Controller
         ]);
 
         if ($validator->fails()) {
+            \Log::warning('BrandController@store validation failed', ['errors' => $validator->errors()]);
             return response()->json([
                 'message' => 'Error de validación',
                 'errors' => $validator->errors()
+            ], 422);
         }
 
         try {
-            $brand = Brand::create($request->all());
+            $data = $request->all();
+            $data['is_active'] = true;
+            $brand = Brand::create($data);
+            \Log::info('BrandController@store success', ['brand' => $brand]);
             return response()->json([
                 'message' => 'Marca creada exitosamente',
                 'brand' => $brand
             ], 201);
         } catch (\Exception $e) {
+            \Log::error('BrandController@store error', ['error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
             return response()->json([
                 'message' => 'Error al crear marca',
-            try {
                 'error' => $e->getMessage()
             ], 500);
         }
@@ -77,6 +82,7 @@ class BrandController extends Controller
             return response()->json(['message' => 'Marca no encontrada'], 404);
         }
 
+        // ...existing code...
             'name' => 'sometimes|string|max:255|unique:brands,name,' . $id,
             'description' => 'nullable|string',
             'image' => 'nullable|string',
