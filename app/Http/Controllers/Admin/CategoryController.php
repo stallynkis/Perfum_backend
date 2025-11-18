@@ -25,7 +25,11 @@ class CategoryController extends Controller
 
     public function store(Request $request)
     {
-        \Log::info('CategoryController@store - Request received', ['data' => $request->all()]);
+        \Log::info('🔵 CategoryController@store - INICIO', [
+            'request_all' => $request->all(),
+            'headers' => $request->headers->all(),
+            'user' => $request->user() ? $request->user()->id : 'NO AUTH'
+        ]);
         
         try {
             $validated = $request->validate([
@@ -33,10 +37,10 @@ class CategoryController extends Controller
                 'description' => 'nullable|string',
                 'image' => 'nullable|string',
                 'order' => 'nullable|integer',
-                'is_active' => 'boolean'
+                'is_active' => 'nullable|boolean'
             ]);
 
-            \Log::info('CategoryController@store - Validation passed', ['validated' => $validated]);
+            \Log::info('✅ CategoryController@store - Validation passed', ['validated' => $validated]);
 
             // Establecer valores por defecto
             $validated['description'] = $validated['description'] ?? '';
