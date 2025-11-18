@@ -184,51 +184,61 @@ class OrderController extends Controller
                 $request->customer_name !== 'CLIENTES VARIOS' &&
                 trim($request->customer_name) !== '') {
                 
-                // Verificar si el cliente ya existe para este vendedor
-                $existingCustomer = \App\Models\SellerCustomer::where('seller_id', $order->user_id)
-                    ->where(function($query) use ($request) {
-                        if ($request->customer_document && $request->customer_document !== '00000000') {
-                            $query->where('document', $request->customer_document);
-                        } else {
-                            $query->where('name', $request->customer_name);
-                        }
-                    })
-                    ->first();
+                try {
+                    // Normalizar documento a string
+                    $customerDocument = $request->customer_document ? (string)$request->customer_document : null;
+                    if ($customerDocument === '00000000') {
+                        $customerDocument = null;
+                    }
+                    
+                    // Verificar si el cliente ya existe para este vendedor
+                    $existingCustomer = \App\Models\SellerCustomer::where('seller_id', $order->user_id)
+                        ->where(function($query) use ($customerDocument, $request) {
+                            if ($customerDocument) {
+                                $query->where('document', $customerDocument);
+                            } else {
+                                $query->where('name', $request->customer_name);
+                            }
+                        })
+                        ->first();
 
-                if (!$existingCustomer) {
-                    // Crear nuevo cliente solo si tiene datos relevantes
-                    if ($request->customer_document && $request->customer_document !== '00000000' ||
-                        $request->customer_phone ||
-                        $request->customer_email) {
-                        \App\Models\SellerCustomer::create([
-                            'seller_id' => $order->user_id,
-                            'name' => $request->customer_name,
-                            'document' => ($request->customer_document && $request->customer_document !== '00000000') ? $request->customer_document : null,
-                            'phone' => $request->customer_phone,
-                            'email' => $request->customer_email,
-                            'address' => $request->shipping_address
-                        ]);
+                    if (!$existingCustomer) {
+                        // Crear nuevo cliente solo si tiene datos relevantes
+                        if ($customerDocument || $request->customer_phone || $request->customer_email) {
+                            \App\Models\SellerCustomer::create([
+                                'seller_id' => $order->user_id,
+                                'name' => $request->customer_name,
+                                'document' => $customerDocument,
+                                'phone' => $request->customer_phone ?: null,
+                                'email' => $request->customer_email ?: null,
+                                'address' => $request->shipping_address ?: null
+                            ]);
+                        }
+                    } else {
+                        // Actualizar datos si están vacíos
+                        $updateData = [];
+                        if (!$existingCustomer->document && $customerDocument) {
+                            $updateData['document'] = $customerDocument;
+                        }
+                        if (!$existingCustomer->phone && $request->customer_phone) {
+                            $updateData['phone'] = $request->customer_phone;
+                        }
+                        if (!$existingCustomer->email && $request->customer_email) {
+                            $updateData['email'] = $request->customer_email;
+                        }
+                        if (!$existingCustomer->address && $request->shipping_address) {
+                            $updateData['address'] = $request->shipping_address;
+                        }
+                        if (!empty($updateData)) {
+                            $existingCustomer->update($updateData);
+                        }
                     }
-                } else {
-                    // Actualizar datos si están vacíos
-                    $updateData = [];
-                    if (!$existingCustomer->document && $request->customer_document && $request->customer_document !== '00000000') {
-                        $updateData['document'] = $request->customer_document;
-                    }
-                    if (!$existingCustomer->phone && $request->customer_phone) {
-                        $updateData['phone'] = $request->customer_phone;
-                    }
-                    if (!$existingCustomer->email && $request->customer_email) {
-                        $updateData['email'] = $request->customer_email;
-                    }
-                    if (!$existingCustomer->address && $request->shipping_address) {
-                        $updateData['address'] = $request->shipping_address;
-                    }
-                    if (!empty($updateData)) {
-                        $existingCustomer->update($updateData);
-                    }
+                } catch (\Exception $e) {
+                    // Log el error pero continuar con la orden
+                    \Log::warning('Error guardando cliente del vendedor: ' . $e->getMessage());
                 }
             }
+
 
             // 🔔 CREAR NOTIFICACIÓN cuando se crea una orden
             \App\Models\Notification::create([
