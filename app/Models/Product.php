@@ -27,6 +27,7 @@ class Product extends Model
         'rating' => 'decimal:1',
         'is_active' => 'boolean',
         'is_featured' => 'boolean',
+        'notes' => 'array',
     ];
 
     // Relaciones

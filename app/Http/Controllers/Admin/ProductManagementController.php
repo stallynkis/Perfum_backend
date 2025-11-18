@@ -40,7 +40,8 @@ class ProductManagementController extends Controller
                 'image' => 'nullable|string|max:16777215',
                 'rating' => 'nullable|numeric|between:0,5',
                 'original_price' => 'nullable|numeric|min:0',
-                'notes' => 'nullable|string',
+                'notes' => 'nullable|array',
+                'notes.*' => 'string',
                 'is_active' => 'nullable|boolean',
                 'is_featured' => 'nullable|boolean',
             ]);
@@ -113,6 +114,7 @@ class ProductManagementController extends Controller
             'rating' => 'sometimes|numeric|between:0,5',
             'original_price' => 'sometimes|nullable|numeric|min:0',
             'notes' => 'sometimes|nullable|array',
+            'notes.*' => 'string',
             'is_active' => 'sometimes|boolean',
             'is_featured' => 'sometimes|boolean',
         ]);
