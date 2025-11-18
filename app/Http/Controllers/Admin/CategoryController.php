@@ -37,7 +37,7 @@ class CategoryController extends Controller
         $validated['description'] = $validated['description'] ?? '';
         $validated['image'] = $validated['image'] ?? '';
         $validated['order'] = $validated['order'] ?? Category::max('order') + 1;
-        $validated['is_active'] = $validated['is_active'] ?? true;
+        $validated['is_active'] = true;
 
         $category = Category::create($validated);
 
@@ -63,6 +63,7 @@ class CategoryController extends Controller
                 'is_active' => 'nullable|boolean'
             ]);
 
+            $validated['is_active'] = true;
             $category->update($validated);
 
             return response()->json([

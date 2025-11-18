@@ -39,7 +39,7 @@ class ProductManagementController extends Controller
             ]);
 
             // Valores por defecto
-            $validated['is_active'] = $validated['is_active'] ?? true;
+            $validated['is_active'] = true;
             $validated['is_featured'] = $validated['is_featured'] ?? false;
             $validated['stock'] = $validated['stock'] ?? 0;
             $validated['rating'] = $validated['rating'] ?? 4.5;
@@ -109,6 +109,7 @@ class ProductManagementController extends Controller
 
         \Log::info('✅ Datos validados:', $validated);
 
+        $validated['is_active'] = true;
         $product->update($validated);
 
         \Log::info('💾 Producto guardado en BD:', [

@@ -51,7 +51,6 @@ class BrandController extends Controller
             return response()->json([
                 'message' => 'Error de validación',
                 'errors' => $validator->errors()
-            ], 422);
         }
 
         try {
@@ -63,6 +62,7 @@ class BrandController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'message' => 'Error al crear marca',
+            try {
                 'error' => $e->getMessage()
             ], 500);
         }
@@ -77,7 +77,6 @@ class BrandController extends Controller
             return response()->json(['message' => 'Marca no encontrada'], 404);
         }
 
-        $validator = Validator::make($request->all(), [
             'name' => 'sometimes|string|max:255|unique:brands,name,' . $id,
             'description' => 'nullable|string',
             'image' => 'nullable|string',
@@ -93,7 +92,9 @@ class BrandController extends Controller
         }
 
         try {
-            $brand->update($request->all());
+            $data = $request->all();
+            $data['is_active'] = true;
+            $brand->update($data);
             return response()->json([
                 'message' => 'Marca actualizada exitosamente',
                 'brand' => $brand
@@ -105,6 +106,7 @@ class BrandController extends Controller
             ], 500);
         }
     }
+        $validator = Validator::make($request->all(), [
 
     // Eliminar marca
     public function destroy($id)
