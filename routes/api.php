@@ -21,6 +21,8 @@ use App\Http\Controllers\Admin\SlideController;
 use App\Http\Controllers\Admin\UserManagementController;
 use App\Http\Controllers\Admin\ProductManagementController;
 use App\Http\Controllers\Admin\StatsController;
+use App\Http\Controllers\Admin\BusinessPartnerController;
+use App\Http\Controllers\Admin\FinancialTransactionController;
 use App\Http\Controllers\User\DeliveryPreferencesController;
 use App\Http\Controllers\BrandController;
 
@@ -180,6 +182,16 @@ Route::middleware('auth:sanctum')->group(function () {
         // Reportes de Vendedores
         Route::get('seller-reports', [\App\Http\Controllers\Admin\SellerReportController::class, 'index']);
         Route::get('seller-reports/{id}', [\App\Http\Controllers\Admin\SellerReportController::class, 'sellerDetail']);
+        
+        // Socios de Negocio (Proveedores, Clientes, Vendedores)
+        Route::apiResource('business-partners', BusinessPartnerController::class);
+        Route::get('suppliers', [BusinessPartnerController::class, 'suppliers']);
+        Route::get('customers', [BusinessPartnerController::class, 'customers']);
+        Route::get('sellers-partners', [BusinessPartnerController::class, 'sellers']);
+        
+        // Transacciones Financieras (Ingresos/Salidas/Gastos)
+        Route::apiResource('financial-transactions', FinancialTransactionController::class);
+        Route::get('financial-transactions/summary/stats', [FinancialTransactionController::class, 'summary']);
     });
 
     // ========== Cajas Registradoras (Admin) ==========
