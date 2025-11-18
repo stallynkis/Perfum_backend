@@ -16,6 +16,7 @@ class DatabaseSeeder extends Seeder
         // Ejecutar seeder del administrador
         $this->call([
             AdminSeeder::class,
+            BusinessPartnerSeeder::class, // Asegurar CLIENTES VARIOS con ID 1
         ]);
     }
 }
