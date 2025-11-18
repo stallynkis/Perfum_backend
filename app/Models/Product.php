@@ -25,7 +25,6 @@ class Product extends Model
         'price' => 'decimal:2',
         'original_price' => 'decimal:2',
         'rating' => 'decimal:1',
-        'notes' => 'array',
         'is_active' => 'boolean',
         'is_featured' => 'boolean',
     ];

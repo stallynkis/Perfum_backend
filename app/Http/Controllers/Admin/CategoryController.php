@@ -33,16 +33,16 @@ class CategoryController extends Controller
                 'description' => 'nullable|string',
                 'image' => 'nullable|string',
                 'order' => 'nullable|integer',
-                'is_active' => 'nullable|boolean'
+                'is_active' => 'boolean'
             ]);
 
             \Log::info('CategoryController@store - Validation passed', ['validated' => $validated]);
 
             // Establecer valores por defecto
             $validated['description'] = $validated['description'] ?? '';
-            $validated['image'] = $validated['image'] ?? '';
-            $validated['order'] = $validated['order'] ?? Category::max('order') + 1;
-            $validated['is_active'] = true;
+            $validated['image'] = $validated['image'] ?? null;
+            $validated['order'] = $validated['order'] ?? (Category::max('order') ?? 0) + 1;
+            $validated['is_active'] = $validated['is_active'] ?? true;
 
             $category = Category::create($validated);
 

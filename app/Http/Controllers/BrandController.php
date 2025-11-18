@@ -45,8 +45,8 @@ class BrandController extends Controller
             'name' => 'required|string|max:255|unique:brands',
             'description' => 'nullable|string',
             'image' => 'nullable|string',
-            'is_active' => 'boolean',
-            'order' => 'integer',
+            'is_active' => 'nullable|boolean',
+            'order' => 'nullable|integer',
         ]);
 
         if ($validator->fails()) {
@@ -59,7 +59,10 @@ class BrandController extends Controller
 
         try {
             $data = $request->all();
-            $data['is_active'] = true;
+            $data['is_active'] = $data['is_active'] ?? true;
+            $data['description'] = $data['description'] ?? '';
+            $data['image'] = $data['image'] ?? null;
+            $data['order'] = $data['order'] ?? (Brand::max('order') ?? 0) + 1;
             $brand = Brand::create($data);
             \Log::info('BrandController@store success', ['brand' => $brand]);
             return response()->json([

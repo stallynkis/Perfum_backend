@@ -29,15 +29,13 @@ class ProductManagementController extends Controller
                 'name' => 'required|string|max:255',
                 'description' => 'nullable|string',
                 'price' => 'required|numeric|min:0',
-                'stock' => 'nullable|integer|min:0',
-                'category_id' => 'nullable|exists:categories,id',
-                'brand_id' => 'nullable|exists:brands,id',
-                'category' => 'nullable|string|max:255',
+                'stock' => 'required|integer|min:0',
+                'category' => 'required|string|max:255',
                 'brand' => 'nullable|string|max:255',
                 'image' => 'nullable|string',
                 'rating' => 'nullable|numeric|between:0,5',
                 'original_price' => 'nullable|numeric|min:0',
-                'notes' => 'nullable|array',
+                'notes' => 'nullable|string',
                 'is_active' => 'nullable|boolean',
                 'is_featured' => 'nullable|boolean',
             ]);
@@ -45,10 +43,11 @@ class ProductManagementController extends Controller
             \Log::info('ProductManagementController@store - Validation passed', ['validated' => $validated]);
 
             // Valores por defecto
-            $validated['is_active'] = true;
+            $validated['is_active'] = $validated['is_active'] ?? true;
             $validated['is_featured'] = $validated['is_featured'] ?? false;
-            $validated['stock'] = $validated['stock'] ?? 0;
             $validated['rating'] = $validated['rating'] ?? 4.5;
+            $validated['brand'] = $validated['brand'] ?? 'Sin marca';
+            $validated['description'] = $validated['description'] ?? '';
 
             $product = Product::create($validated);
 
