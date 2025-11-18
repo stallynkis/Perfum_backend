@@ -82,6 +82,14 @@ class ProductController extends Controller
                 'is_featured' => 'nullable|boolean'
             ]);
 
+            // Limpiar comillas extras de category y brand
+            if (isset($validated['category'])) {
+                $validated['category'] = trim(str_replace(['"', "'"], '', $validated['category']));
+            }
+            if (isset($validated['brand'])) {
+                $validated['brand'] = trim(str_replace(['"', "'"], '', $validated['brand']));
+            }
+
             // Valores por defecto
             $validated['stock'] = $validated['stock'] ?? 0;
             $validated['rating'] = $validated['rating'] ?? 4.5;
@@ -128,6 +136,14 @@ class ProductController extends Controller
             'is_active' => 'sometimes|boolean',
             'is_featured' => 'sometimes|boolean'
         ]);
+
+        // Limpiar comillas extras de category y brand
+        if (isset($validated['category'])) {
+            $validated['category'] = trim(str_replace(['"', "'"], '', $validated['category']));
+        }
+        if (isset($validated['brand'])) {
+            $validated['brand'] = trim(str_replace(['"', "'"], '', $validated['brand']));
+        }
 
         $product->update($validated);
 
