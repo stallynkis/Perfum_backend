@@ -23,6 +23,7 @@ use App\Http\Controllers\Admin\ProductManagementController;
 use App\Http\Controllers\Admin\StatsController;
 use App\Http\Controllers\Admin\BusinessPartnerController;
 use App\Http\Controllers\Admin\FinancialTransactionController;
+use App\Http\Controllers\InventoryMovementController;
 use App\Http\Controllers\User\DeliveryPreferencesController;
 use App\Http\Controllers\BrandController;
 
@@ -192,6 +193,12 @@ Route::middleware('auth:sanctum')->group(function () {
         // Transacciones Financieras (Ingresos/Salidas/Gastos)
         Route::apiResource('financial-transactions', FinancialTransactionController::class);
         Route::get('financial-transactions/summary/stats', [FinancialTransactionController::class, 'summary']);
+        
+        // Movimientos de Inventario
+        Route::get('inventory-movements', [InventoryMovementController::class, 'index']);
+        Route::post('inventory-movements', [InventoryMovementController::class, 'store']);
+        Route::get('inventory-movements/stats', [InventoryMovementController::class, 'stats']);
+        Route::get('inventory-movements/{id}', [InventoryMovementController::class, 'show']);
     });
 
     // ========== Cajas Registradoras (Admin) ==========
