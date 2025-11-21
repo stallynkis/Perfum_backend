@@ -18,11 +18,11 @@ return new class extends Migration
             $table->decimal('amount', 10, 2);
             $table->text('description')->nullable();
             $table->unsignedBigInteger('cash_register_id')->nullable(); // Opcional
-            $table->unsignedBigInteger('user_id'); // Quien registró
+            $table->unsignedBigInteger('user_id')->nullable(); // Quien registró (nullable)
             $table->date('transaction_date'); // Fecha de la transacción
             $table->timestamps();
 
-            $table->foreign('user_id')->references('id')->on('users')->onDelete('cascade');
+            $table->foreign('user_id')->references('id')->on('users')->onDelete('set null');
         });
     }
 

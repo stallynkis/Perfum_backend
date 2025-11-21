@@ -19,7 +19,7 @@ return new class extends Migration
             $table->integer('stock')->nullable()->default(0);
             $table->string('category')->default('general');
             $table->string('brand')->nullable();
-            $table->string('image')->nullable();
+            $table->mediumText('image')->nullable(); // Cambiado a mediumText para base64
             $table->decimal('rating', 3, 1)->nullable()->default(4.5);
             $table->decimal('original_price', 10, 2)->nullable();
             $table->json('notes')->nullable(); // Para las notas como array

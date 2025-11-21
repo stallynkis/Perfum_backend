@@ -16,7 +16,8 @@ return new class extends Migration
             $existingIndexes = $connection->select("SELECT name FROM sqlite_master WHERE type='index'");
             $indexNames = array_column($existingIndexes, 'name');
             
-            // Índices para notifications
+            // Índices para notifications (comentado - tabla no existe)
+            /*
             Schema::table('notifications', function (Blueprint $table) use ($indexNames) {
                 if (!in_array('notifications_created_at_index', $indexNames)) {
                     $table->index('created_at');
@@ -28,6 +29,7 @@ return new class extends Migration
                     $table->index(['user_id', 'created_at']);
                 }
             });
+            */
 
             // Índices para users
             Schema::table('users', function (Blueprint $table) use ($indexNames) {

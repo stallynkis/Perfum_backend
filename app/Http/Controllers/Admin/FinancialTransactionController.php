@@ -54,8 +54,10 @@ class FinancialTransactionController extends Controller
                 'transaction_date' => 'required|date'
             ]);
 
-            // Agregar user_id del usuario autenticado
-            $validated['user_id'] = auth()->id();
+            // Agregar user_id del usuario autenticado (nullable)
+            if (auth()->check()) {
+                $validated['user_id'] = auth()->id();
+            }
 
             $transaction = FinancialTransaction::create($validated);
 

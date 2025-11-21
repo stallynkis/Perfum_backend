@@ -191,13 +191,15 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('sellers-partners', [BusinessPartnerController::class, 'sellers']);
         
         // Transacciones Financieras (Ingresos/Salidas/Gastos)
-        Route::apiResource('financial-transactions', FinancialTransactionController::class);
+        // IMPORTANTE: Las rutas específicas DEBEN ir ANTES del apiResource
         Route::get('financial-transactions/summary/stats', [FinancialTransactionController::class, 'summary']);
+        Route::apiResource('financial-transactions', FinancialTransactionController::class);
         
         // Movimientos de Inventario
+        // IMPORTANTE: Las rutas específicas DEBEN ir ANTES de las genéricas
+        Route::get('inventory-movements/stats', [InventoryMovementController::class, 'stats']);
         Route::get('inventory-movements', [InventoryMovementController::class, 'index']);
         Route::post('inventory-movements', [InventoryMovementController::class, 'store']);
-        Route::get('inventory-movements/stats', [InventoryMovementController::class, 'stats']);
         Route::get('inventory-movements/{id}', [InventoryMovementController::class, 'show']);
     });
 

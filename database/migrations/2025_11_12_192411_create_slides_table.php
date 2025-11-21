@@ -13,7 +13,7 @@ return new class extends Migration
     {
         Schema::create('slides', function (Blueprint $table) {
             $table->id();
-            $table->string('image');
+            $table->mediumText('image'); // Cambiado a mediumText para base64
             $table->string('title');
             $table->string('subtitle')->nullable();
             $table->string('buttonText')->nullable();
