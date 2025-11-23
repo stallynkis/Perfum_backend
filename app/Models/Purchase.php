@@ -7,6 +7,8 @@ use Illuminate\Database\Eloquent\Model;
 class Purchase extends Model
 {
     protected $fillable = [
+        'business_partner_id',
+        'document_type',
         'product_id',
         'quantity',
         'unit_cost',
@@ -30,6 +32,11 @@ class Purchase extends Model
     public function product()
     {
         return $this->belongsTo(Product::class);
+    }
+
+    public function businessPartner()
+    {
+        return $this->belongsTo(BusinessPartner::class);
     }
 
     // Eventos del modelo
