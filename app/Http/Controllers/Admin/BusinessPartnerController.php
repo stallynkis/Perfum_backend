@@ -49,6 +49,18 @@ class BusinessPartnerController extends Controller
                 'notes' => 'nullable|string'
             ]);
 
+            // Verificar si ya existe un socio con el mismo RUC/DNI
+            if (!empty($validated['ruc'])) {
+                $existing = BusinessPartner::where('ruc', $validated['ruc'])->first();
+                if ($existing) {
+                    \Log::info('ℹ️ Socio ya existe', ['id' => $existing->id, 'ruc' => $validated['ruc']]);
+                    return response()->json([
+                        'partner' => $existing,
+                        'message' => 'El socio ya existe'
+                    ], 422);
+                }
+            }
+
             $partner = BusinessPartner::create($validated);
 
             \Log::info('✅ Socio creado', ['id' => $partner->id]);

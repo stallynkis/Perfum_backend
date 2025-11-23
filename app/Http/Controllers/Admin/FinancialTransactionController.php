@@ -12,6 +12,10 @@ class FinancialTransactionController extends Controller
     // Obtener todas las transacciones con filtros
     public function index(Request $request)
     {
+        \Log::info('📊 Obteniendo transacciones', [
+            'filters' => $request->all()
+        ]);
+
         $query = FinancialTransaction::with('user');
 
         // Filtrar por tipo
@@ -26,15 +30,20 @@ class FinancialTransactionController extends Controller
 
         // Filtrar por rango de fechas
         if ($request->has('start_date')) {
-            $query->where('transaction_date', '>=', $request->start_date);
+            $query->whereDate('transaction_date', '>=', $request->start_date);
         }
         if ($request->has('end_date')) {
-            $query->where('transaction_date', '<=', $request->end_date);
+            $query->whereDate('transaction_date', '<=', $request->end_date);
         }
 
         $transactions = $query->orderBy('transaction_date', 'desc')
                               ->orderBy('created_at', 'desc')
                               ->get();
+
+        \Log::info('✅ Transacciones encontradas', [
+            'count' => $transactions->count(),
+            'total_in_db' => FinancialTransaction::count()
+        ]);
 
         return response()->json(['data' => $transactions]);
     }
@@ -88,14 +97,21 @@ class FinancialTransactionController extends Controller
         $endDate = $request->get('end_date', now()->toDateString());
         $category = $request->get('category'); // 'negocio', 'personal', o null para ambos
 
-        $query = FinancialTransaction::whereBetween('transaction_date', [$startDate, $endDate]);
+        \Log::info('📊 Calculando resumen financiero', [
+            'start_date' => $startDate,
+            'end_date' => $endDate,
+            'category' => $category
+        ]);
+
+        $baseQuery = FinancialTransaction::whereDate('transaction_date', '>=', $startDate)
+            ->whereDate('transaction_date', '<=', $endDate);
         
         if ($category) {
-            $query->where('category', $category);
+            $baseQuery->where('category', $category);
         }
 
         // Totales por tipo
-        $summary = $query->select(
+        $summary = (clone $baseQuery)->select(
             'type',
             'category',
             DB::raw('SUM(amount) as total'),
@@ -105,20 +121,34 @@ class FinancialTransactionController extends Controller
         ->get();
 
         // Calcular totales generales
-        $totalIncome = $query->clone()->where('type', 'income')->sum('amount');
-        $totalWithdrawals = $query->clone()->where('type', 'withdrawal')->sum('amount');
-        $totalExpenses = $query->clone()->where('type', 'expense')->sum('amount');
+        $totalIncome = (clone $baseQuery)->where('type', 'income')->sum('amount') ?? 0;
+        $totalWithdrawals = (clone $baseQuery)->where('type', 'withdrawal')->sum('amount') ?? 0;
+        $totalExpenses = (clone $baseQuery)->where('type', 'expense')->sum('amount') ?? 0;
         
         $balance = $totalIncome - ($totalWithdrawals + $totalExpenses);
 
         // Totales por categoría
-        $negocioIncome = $query->clone()->where('type', 'income')->where('category', 'negocio')->sum('amount');
-        $negocioExpenses = $query->clone()->whereIn('type', ['withdrawal', 'expense'])->where('category', 'negocio')->sum('amount');
+        $negocioQuery = FinancialTransaction::whereDate('transaction_date', '>=', $startDate)
+            ->whereDate('transaction_date', '<=', $endDate)
+            ->where('category', 'negocio');
+        
+        $negocioIncome = (clone $negocioQuery)->where('type', 'income')->sum('amount') ?? 0;
+        $negocioExpenses = (clone $negocioQuery)->whereIn('type', ['withdrawal', 'expense'])->sum('amount') ?? 0;
         $negocioBalance = $negocioIncome - $negocioExpenses;
 
-        $personalIncome = $query->clone()->where('type', 'income')->where('category', 'personal')->sum('amount');
-        $personalExpenses = $query->clone()->whereIn('type', ['withdrawal', 'expense'])->where('category', 'personal')->sum('amount');
+        $personalQuery = FinancialTransaction::whereDate('transaction_date', '>=', $startDate)
+            ->whereDate('transaction_date', '<=', $endDate)
+            ->where('category', 'personal');
+        
+        $personalIncome = (clone $personalQuery)->where('type', 'income')->sum('amount') ?? 0;
+        $personalExpenses = (clone $personalQuery)->whereIn('type', ['withdrawal', 'expense'])->sum('amount') ?? 0;
         $personalBalance = $personalIncome - $personalExpenses;
+
+        \Log::info('✅ Resumen calculado', [
+            'total_income' => $totalIncome,
+            'negocio_income' => $negocioIncome,
+            'personal_income' => $personalIncome
+        ]);
 
         return response()->json([
             'summary' => $summary,
