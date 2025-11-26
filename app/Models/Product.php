@@ -18,7 +18,8 @@ class Product extends Model
         'original_price',
         'notes',
         'is_active',
-        'is_featured'
+        'is_featured',
+        'barcode'
     ];
 
     protected $casts = [
