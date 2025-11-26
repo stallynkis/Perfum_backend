@@ -19,8 +19,8 @@ return new class extends Migration
             
             // Customer information
             $table->string('customer_name');
-            $table->string('customer_email');
-            $table->string('customer_phone');
+            $table->string('customer_email')->nullable();
+            $table->string('customer_phone')->nullable();
             $table->string('customer_document')->nullable();
             
             // Delivery information
@@ -49,7 +49,7 @@ return new class extends Migration
             $table->enum('payment_status', ['pending', 'paid', 'failed', 'refunded'])->default('pending');
             
             // Order status
-            $table->enum('status', ['pending', 'processing', 'shipped', 'delivered', 'cancelled'])->default('pending');
+            $table->enum('status', ['pending', 'processing', 'shipped', 'delivered', 'cancelled', 'completed'])->default('pending');
             
             // Notes
             $table->text('notes')->nullable();

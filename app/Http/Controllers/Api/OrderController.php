@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Order;
 use App\Models\Product;
+use App\Events\OrderCreated;
+use App\Events\ProductStockUpdated;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -123,8 +125,17 @@ class OrderController extends Controller
                     throw new \Exception("Stock insuficiente para {$product->name}. Disponible: {$product->stock}");
                 }
 
+                // Guardar stock anterior
+                $oldStock = $product->stock;
+
                 // Reduce stock
                 $product->decrement('stock', $item['quantity']);
+                
+                // Refrescar modelo para obtener nuevo stock
+                $product->refresh();
+
+                // 🔴 EMITIR EVENTO: Stock actualizado en tiempo real
+                broadcast(new ProductStockUpdated($product, $oldStock, $product->stock))->toOthers();
 
                 // Add to order items
                 $orderItems[] = [
@@ -275,6 +286,7 @@ class OrderController extends Controller
 
 
             // 🔔 CREAR NOTIFICACIÓN cuando se crea una orden
+            /*
             \App\Models\Notification::create([
                 'type' => 'new_order',
                 'title' => '🛒 Nuevo Pedido',
@@ -292,6 +304,10 @@ class OrderController extends Controller
                     'requires_confirmation' => $requiresConfirmation
                 ]
             ]);
+            */
+
+            // 🔴 EMITIR EVENTO: Nueva orden creada
+            broadcast(new OrderCreated($order))->toOthers();
 
             DB::commit();
 
@@ -303,10 +319,21 @@ class OrderController extends Controller
 
         } catch (\Exception $e) {
             DB::rollBack();
+            
+            \Log::error('❌ ERROR AL CREAR PEDIDO:', [
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => $e->getTraceAsString()
+            ]);
 
             return response()->json([
                 'success' => false,
-                'message' => 'Error al crear el pedido: ' . $e->getMessage()
+                'message' => 'Error al crear el pedido: ' . $e->getMessage(),
+                'error_details' => [
+                    'file' => $e->getFile(),
+                    'line' => $e->getLine()
+                ]
             ], 500);
         }
     }
