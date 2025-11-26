@@ -113,29 +113,88 @@ class PurchaseController extends Controller
         return response()->json($purchase);
     }
 
-    public function update(Request $request, Purchase $purchase): JsonResponse
+    public function update(Request $request, $id): JsonResponse
     {
         $validated = $request->validate([
-            'quantity' => 'sometimes|integer|min:1',
-            'unit_cost' => 'sometimes|numeric|min:0',
-            'invoice_number' => 'nullable|string|max:255',
+            'business_partner_id' => 'required|exists:business_partners,id',
+            'document_type' => 'required|string|in:factura,boleta,nota_credito,nota_debito',
+            'serie' => 'required|string|max:10',
+            'numero' => 'required|string|max:20',
+            'fecha_emision' => 'required|date',
+            'subtotal' => 'required|numeric|min:0',
+            'igv' => 'required|numeric|min:0',
+            'total' => 'required|numeric|min:0',
             'notes' => 'nullable|string',
-            'purchase_date' => 'sometimes|date'
+            'items' => 'required|array|min:1',
+            'items.*.product_id' => 'required|exists:products,id',
+            'items.*.quantity' => 'required|integer|min:1',
+            'items.*.unit_price' => 'required|numeric|min:0',
+            'items.*.subtotal' => 'required|numeric|min:0'
         ]);
 
-        if (isset($validated['quantity']) || isset($validated['unit_cost'])) {
-            $quantity = $validated['quantity'] ?? $purchase->quantity;
-            $unitCost = $validated['unit_cost'] ?? $purchase->unit_cost;
-            $validated['total_cost'] = $quantity * $unitCost;
+        // Usar transacción para garantizar consistencia
+        \DB::beginTransaction();
+        try {
+            $invoiceNumber = $validated['serie'] . '-' . $validated['numero'];
+
+            // 1. Obtener todas las compras con el invoice_number anterior
+            $oldPurchases = Purchase::where('id', $id)
+                ->orWhere('invoice_number', Purchase::find($id)->invoice_number)
+                ->get();
+
+            // 2. Revertir el stock de las compras anteriores
+            foreach ($oldPurchases as $oldPurchase) {
+                $product = Product::find($oldPurchase->product_id);
+                if ($product) {
+                    $product->decrement('stock', $oldPurchase->quantity);
+                }
+            }
+
+            // 3. Eliminar las compras anteriores
+            Purchase::where('invoice_number', Purchase::find($id)->invoice_number)->delete();
+
+            // 4. Crear las nuevas compras
+            $purchases = [];
+            foreach ($validated['items'] as $item) {
+                $purchase = Purchase::create([
+                    'business_partner_id' => $validated['business_partner_id'],
+                    'document_type' => $validated['document_type'],
+                    'product_id' => $item['product_id'],
+                    'quantity' => $item['quantity'],
+                    'unit_cost' => $item['unit_price'],
+                    'total_cost' => $item['subtotal'],
+                    'invoice_number' => $invoiceNumber,
+                    'purchase_date' => $validated['fecha_emision'],
+                    'notes' => $validated['notes'] ?? null
+                ]);
+
+                // 5. Aplicar el nuevo stock
+                $product = Product::find($item['product_id']);
+                if ($product) {
+                    $product->increment('stock', $item['quantity']);
+                }
+
+                $purchases[] = $purchase->load('product', 'businessPartner');
+            }
+
+            \DB::commit();
+
+            return response()->json([
+                'message' => 'Compra actualizada exitosamente',
+                'data' => [
+                    'invoice_number' => $invoiceNumber,
+                    'items' => $purchases,
+                    'subtotal' => $validated['subtotal'],
+                    'igv' => $validated['igv'],
+                    'total' => $validated['total']
+                ]
+            ]);
+        } catch (\Exception $e) {
+            \DB::rollBack();
+            return response()->json([
+                'message' => 'Error al actualizar compra: ' . $e->getMessage()
+            ], 500);
         }
-
-        $purchase->update($validated);
-        $purchase->load(['product', 'businessPartner']);
-
-        return response()->json([
-            'message' => 'Compra actualizada exitosamente',
-            'purchase' => $purchase
-        ]);
     }
 
     public function destroy(Purchase $purchase): JsonResponse
