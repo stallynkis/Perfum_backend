@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Order;
 use App\Models\Product;
+use App\Models\CashRegister;
+use App\Models\CashMovement;
 use App\Events\OrderCreated;
 use App\Events\ProductStockUpdated;
 use Illuminate\Http\Request;
@@ -306,7 +308,49 @@ class OrderController extends Controller
             ]);
             */
 
-            // 🔴 EMITIR EVENTO: Nueva orden creada
+            // � REGISTRAR MOVIMIENTO DE CAJA para ventas de vendedor
+            if ($source === 'seller' && auth()->check()) {
+                try {
+                    $cashRegister = CashRegister::where('responsible_user_id', auth()->id())
+                        ->where('is_active', true)
+                        ->first();
+
+                    if ($cashRegister) {
+                        $currentSession = $cashRegister->currentSession();
+                        if ($currentSession) {
+                            CashMovement::create([
+                                'cash_session_id'   => $currentSession->id,
+                                'type'              => 'sale',
+                                'amount'            => $request->total,
+                                'description'       => 'Venta POS - ' . $orderNumber,
+                                'reference_id'      => $order->id,
+                                'reference_type'    => 'order',
+                                'user_id'           => auth()->id(),
+                                'seller_id'         => auth()->id(),
+                                'customer_name'     => $request->customer_name,
+                                'customer_document' => $request->customer_document,
+                                'payment_method'    => $request->payment_method,
+                                'document_type'     => $request->document_type,
+                            ]);
+                            $currentSession->increment('expected_amount', $request->total);
+                            \Log::info('💰 Movimiento de caja registrado', [
+                                'order'   => $orderNumber,
+                                'total'   => $request->total,
+                                'session' => $currentSession->id
+                            ]);
+                        } else {
+                            \Log::warning('⚠️ Vendedor sin sesión de caja abierta', ['user_id' => auth()->id()]);
+                        }
+                    } else {
+                        \Log::warning('⚠️ Vendedor sin caja asignada', ['user_id' => auth()->id()]);
+                    }
+                } catch (\Exception $cashException) {
+                    \Log::error('❌ Error registrando movimiento de caja: ' . $cashException->getMessage());
+                    // No interrumpir la orden por error de caja
+                }
+            }
+
+            // �🔴 EMITIR EVENTO: Nueva orden creada
             broadcast(new OrderCreated($order))->toOthers();
 
             DB::commit();
