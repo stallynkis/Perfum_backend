@@ -15,6 +15,28 @@ class CashRegisterController extends Controller
     public function index()
     {
         $registers = CashRegister::with('responsibleUser')->get();
+        
+        // Incluir sesión actual y conteo de sesiones para cada caja
+        $registers->each(function ($register) {
+            $currentSession = $register->currentSession();
+            $register->current_session = $currentSession ? $currentSession->load('user') : null;
+            $register->sessions_count = $register->sessions()->count();
+            $register->closed_sessions_count = $register->sessions()->where('status', 'closed')->count();
+            
+            // Si hay sesión abierta, contar movimientos de venta
+            if ($currentSession) {
+                $register->current_sales_count = $currentSession->movements()
+                    ->where('type', 'sale')->count();
+                $register->current_sales_total = $currentSession->movements()
+                    ->where('type', 'sale')->sum('amount');
+                $register->current_movements_count = $currentSession->movements()->count();
+            } else {
+                $register->current_sales_count = 0;
+                $register->current_sales_total = 0;
+                $register->current_movements_count = 0;
+            }
+        });
+        
         return response()->json($registers);
     }
 
@@ -163,6 +185,14 @@ class CashRegisterController extends Controller
             'notes' => ($session->notes ?? '') . "\n" . ($validated['notes'] ?? '')
         ]);
 
+        // Actualizar el balance de la caja registradora
+        $register = $session->cashRegister;
+        if ($register) {
+            $register->update([
+                'current_balance' => $validated['closing_amount']
+            ]);
+        }
+
         return response()->json([
             'message' => 'Sesión cerrada exitosamente',
             'session' => $session->load(['cashRegister', 'user'])
@@ -243,6 +273,34 @@ class CashRegisterController extends Controller
         ->get();
         
         return response()->json($movements);
+    }
+
+    // ========== ALL SESSIONS (HISTORY) ==========
+
+    public function getAllSessions(Request $request)
+    {
+        $query = CashSession::with(['cashRegister', 'user']);
+        
+        // Filtrar por estado si se proporciona
+        if ($request->has('status')) {
+            $query->where('status', $request->status);
+        }
+        
+        // Filtrar por caja si se proporciona
+        if ($request->has('cash_register_id')) {
+            $query->where('cash_register_id', $request->cash_register_id);
+        }
+        
+        $sessions = $query->orderBy('opening_date', 'desc')->get();
+        
+        // Agregar conteo de movimientos por sesión
+        $sessions->each(function ($session) {
+            $session->movements_count = $session->movements()->count();
+            $session->sales_count = $session->movements()->where('type', 'sale')->count();
+            $session->sales_total = $session->movements()->where('type', 'sale')->sum('amount');
+        });
+        
+        return response()->json($sessions);
     }
 
     // ========== SELLER ROUTES ==========

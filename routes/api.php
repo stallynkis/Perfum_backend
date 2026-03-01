@@ -221,6 +221,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/movements', [\App\Http\Controllers\Admin\CashRegisterController::class, 'addMovement']);
         Route::get('/sessions/{id}/movements', [\App\Http\Controllers\Admin\CashRegisterController::class, 'getMovements']);
         Route::get('/movements/date-range', [\App\Http\Controllers\Admin\CashRegisterController::class, 'getMovementsByDateRange']);
+        
+        // Historial de sesiones (todas las cajas)
+        Route::get('/all-sessions', [\App\Http\Controllers\Admin\CashRegisterController::class, 'getAllSessions']);
     });
 
     // ========== Cajas Registradoras (Seller) ==========
