@@ -150,7 +150,7 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     // ========== Panel de Administración ==========
-    Route::prefix('admin')->group(function () {
+    Route::prefix('admin')->name('admin.')->group(function () {
         // Verificar sesión de admin
         Route::get('me', [AuthController::class, 'adminMe']);
         Route::post('logout', [AuthController::class, 'adminLogout']);
