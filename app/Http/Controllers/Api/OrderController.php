@@ -91,7 +91,7 @@ class OrderController extends Controller
             'tax' => 'nullable|numeric|min:0',
             'shipping_cost' => 'nullable|numeric|min:0',
             'total' => 'required|numeric|min:0',
-            'payment_method' => 'required|in:paypal,yape,cash,card,transfer',
+            'payment_method' => 'required|in:paypal,yape,cash,card,transfer,mixed',
             'payment_status' => 'nullable|in:pending,paid,failed,refunded',
             'status' => 'nullable|in:pending,processing,shipped,delivered,cancelled,completed',
             'transaction_id' => 'nullable|string|max:255',
@@ -309,40 +309,55 @@ class OrderController extends Controller
             */
 
             // � REGISTRAR MOVIMIENTO DE CAJA para ventas de vendedor
-            if ($source === 'seller' && auth()->check()) {
+            // Usar auth('sanctum') porque POST /orders es ruta publica
+            $sanctumUser = auth('sanctum')->user();
+            if ($source === 'seller' && $sanctumUser) {
                 try {
-                    $cashRegister = CashRegister::where('responsible_user_id', auth()->id())
+                    $cashRegister = CashRegister::where('responsible_user_id', $sanctumUser->id)
                         ->where('is_active', true)
                         ->first();
 
                     if ($cashRegister) {
                         $currentSession = $cashRegister->currentSession();
                         if ($currentSession) {
-                            CashMovement::create([
-                                'cash_session_id'   => $currentSession->id,
-                                'type'              => 'sale',
-                                'amount'            => $request->total,
-                                'description'       => 'Venta POS - ' . $orderNumber,
-                                'reference_id'      => $order->id,
-                                'reference_type'    => 'order',
-                                'user_id'           => auth()->id(),
-                                'seller_id'         => auth()->id(),
-                                'customer_name'     => $request->customer_name,
-                                'customer_document' => $request->customer_document,
-                                'payment_method'    => $request->payment_method,
-                                'document_type'     => $request->document_type,
-                            ]);
+                            // ✅ Incrementar expected_amount PRIMERO (siempre, independiente del movimiento)
                             $currentSession->increment('expected_amount', $request->total);
-                            \Log::info('💰 Movimiento de caja registrado', [
+
+                            // Registrar movimiento (puede fallar sin afectar el balance)
+                            try {
+                                // 'mixed' no es un valor ENUM válido → usar null
+                                $pmForMovement = in_array($request->payment_method, ['cash', 'card', 'yape', 'transfer'])
+                                    ? $request->payment_method
+                                    : null;
+
+                                CashMovement::create([
+                                    'cash_session_id'   => $currentSession->id,
+                                    'type'              => 'sale',
+                                    'amount'            => $request->total,
+                                    'description'       => 'Venta POS - ' . $orderNumber,
+                                    'reference_id'      => $order->id,
+                                    'reference_type'    => 'order',
+                                    'user_id'           => $sanctumUser->id,
+                                    'seller_id'         => $sanctumUser->id,
+                                    'customer_name'     => $request->customer_name,
+                                    'customer_document' => $request->customer_document,
+                                    'payment_method'    => $pmForMovement,
+                                    'document_type'     => $request->document_type,
+                                ]);
+                            } catch (\Exception $movException) {
+                                \Log::warning('⚠️ No se pudo crear movimiento de caja (balance ya actualizado): ' . $movException->getMessage());
+                            }
+
+                            \Log::info('💰 Balance de caja actualizado', [
                                 'order'   => $orderNumber,
                                 'total'   => $request->total,
                                 'session' => $currentSession->id
                             ]);
                         } else {
-                            \Log::warning('⚠️ Vendedor sin sesión de caja abierta', ['user_id' => auth()->id()]);
+                            \Log::warning('⚠️ Vendedor sin sesión de caja abierta', ['user_id' => $sanctumUser->id]);
                         }
                     } else {
-                        \Log::warning('⚠️ Vendedor sin caja asignada', ['user_id' => auth()->id()]);
+                        \Log::warning('⚠️ Vendedor sin caja asignada', ['user_id' => $sanctumUser->id]);
                     }
                 } catch (\Exception $cashException) {
                     \Log::error('❌ Error registrando movimiento de caja: ' . $cashException->getMessage());

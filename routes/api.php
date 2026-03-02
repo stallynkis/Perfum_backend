@@ -26,6 +26,7 @@ use App\Http\Controllers\Admin\FinancialTransactionController;
 use App\Http\Controllers\InventoryMovementController;
 use App\Http\Controllers\User\DeliveryPreferencesController;
 use App\Http\Controllers\BrandController;
+use App\Http\Controllers\Admin\SettingsController;
 
 // ============================================
 // RUTAS PÚBLICAS (Sin autenticación)
@@ -72,6 +73,9 @@ Route::get('/categories', [CategoryController::class, 'publicIndex']);
 
 // Beneficios públicos
 Route::get('/benefits', [BenefitController::class, 'publicIndex']);
+
+// Configuración del negocio (pública — la usan vendedores para generar tickets)
+Route::get('/settings/business', [SettingsController::class, 'getBusinessInfo']);
 
 // ============================================
 // RUTAS PROTEGIDAS (Requieren autenticación)
@@ -201,29 +205,36 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('inventory-movements', [InventoryMovementController::class, 'index']);
         Route::post('inventory-movements', [InventoryMovementController::class, 'store']);
         Route::get('inventory-movements/{id}', [InventoryMovementController::class, 'show']);
+
+        // Configuración del negocio (tickets)
+        Route::put('settings/business', [SettingsController::class, 'updateBusinessInfo']);
     });
 
     // ========== Cajas Registradoras (Admin) ==========
     Route::prefix('admin/cash-registers')->group(function () {
+        // ⚠️ IMPORTANTE: Las rutas con nombre fijo DEBEN ir ANTES de /{id}
+        // para evitar que el wildcard las intercepte.
+
+        // Historial de sesiones (todas las cajas)
+        Route::get('/all-sessions', [\App\Http\Controllers\Admin\CashRegisterController::class, 'getAllSessions']);
+
+        // Sesiones — rutas fijas
+        Route::post('/sessions/open', [\App\Http\Controllers\Admin\CashRegisterController::class, 'openSession']);
+        Route::put('/sessions/{id}/close', [\App\Http\Controllers\Admin\CashRegisterController::class, 'closeSession']);
+        Route::get('/sessions/{id}/movements', [\App\Http\Controllers\Admin\CashRegisterController::class, 'getMovements']);
+
+        // Movimientos — rutas fijas
+        Route::post('/movements', [\App\Http\Controllers\Admin\CashRegisterController::class, 'addMovement']);
+        Route::get('/movements/date-range', [\App\Http\Controllers\Admin\CashRegisterController::class, 'getMovementsByDateRange']);
+
+        // CRUD base (con wildcard /{id} al final para no interceptar rutas fijas)
         Route::get('/', [\App\Http\Controllers\Admin\CashRegisterController::class, 'index']);
         Route::post('/', [\App\Http\Controllers\Admin\CashRegisterController::class, 'store']);
         Route::get('/{id}', [\App\Http\Controllers\Admin\CashRegisterController::class, 'show']);
         Route::put('/{id}', [\App\Http\Controllers\Admin\CashRegisterController::class, 'update']);
         Route::delete('/{id}', [\App\Http\Controllers\Admin\CashRegisterController::class, 'destroy']);
-        
-        // Sesiones
         Route::get('/{id}/sessions', [\App\Http\Controllers\Admin\CashRegisterController::class, 'getSessions']);
         Route::get('/{id}/current-session', [\App\Http\Controllers\Admin\CashRegisterController::class, 'getCurrentSession']);
-        Route::post('/sessions/open', [\App\Http\Controllers\Admin\CashRegisterController::class, 'openSession']);
-        Route::put('/sessions/{id}/close', [\App\Http\Controllers\Admin\CashRegisterController::class, 'closeSession']);
-        
-        // Movimientos
-        Route::post('/movements', [\App\Http\Controllers\Admin\CashRegisterController::class, 'addMovement']);
-        Route::get('/sessions/{id}/movements', [\App\Http\Controllers\Admin\CashRegisterController::class, 'getMovements']);
-        Route::get('/movements/date-range', [\App\Http\Controllers\Admin\CashRegisterController::class, 'getMovementsByDateRange']);
-        
-        // Historial de sesiones (todas las cajas)
-        Route::get('/all-sessions', [\App\Http\Controllers\Admin\CashRegisterController::class, 'getAllSessions']);
     });
 
     // ========== Cajas Registradoras (Seller) ==========

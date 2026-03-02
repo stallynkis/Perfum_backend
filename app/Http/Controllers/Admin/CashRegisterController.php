@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\CashRegister;
 use App\Models\CashSession;
 use App\Models\CashMovement;
+use App\Models\Order;
 use Illuminate\Http\Request;
 
 class CashRegisterController extends Controller
@@ -322,6 +323,43 @@ class CashRegisterController extends Controller
         }
 
         $currentSession = $register->currentSession();
+
+        // Recalcular expected_amount desde movimientos reales (corrige datos históricos)
+        if ($currentSession) {
+            $movSales      = (float) $currentSession->movements()->whereIn('type', ['sale', 'income', 'deposit'])->sum('amount');
+            $expensesTotal = (float) $currentSession->movements()->whereIn('type', ['purchase', 'expense', 'withdrawal'])->sum('amount');
+
+            // Fallback: si no hay movimientos en caja (ventas previas al fix), sumar desde la tabla orders
+            if ($movSales == 0.0) {
+                $orderSales = (float) Order::where('user_id', $userId)
+                    ->where('source', 'seller')
+                    ->where('status', '!=', 'cancelled')
+                    ->where('created_at', '>=', $currentSession->opening_date)
+                    ->sum('total');
+                $salesTotal = $orderSales;
+            } else {
+                $salesTotal = $movSales;
+            }
+
+            $realExpected = (float)$currentSession->opening_amount + $salesTotal - $expensesTotal;
+
+            if (abs($realExpected - (float)$currentSession->expected_amount) > 0.001) {
+                $currentSession->update(['expected_amount' => $realExpected]);
+                $currentSession->refresh();
+            }
+
+            // Datos extra para el panel del vendedor
+            $salesCount = $currentSession->movements()->where('type', 'sale')->count();
+            if ($salesCount == 0) {
+                $salesCount = Order::where('user_id', $userId)
+                    ->where('source', 'seller')
+                    ->where('status', '!=', 'cancelled')
+                    ->where('created_at', '>=', $currentSession->opening_date)
+                    ->count();
+            }
+            $currentSession->sales_count = $salesCount;
+            $currentSession->sales_total = $salesTotal;
+        }
 
         return response()->json([
             'register' => $register,
