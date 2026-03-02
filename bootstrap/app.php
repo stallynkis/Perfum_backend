@@ -22,6 +22,11 @@ return Application::configure(basePath: dirname(__DIR__))
             'api/*',
             'sanctum/*',
         ]);
+
+        // Alias de middlewares personalizados
+        $middleware->alias([
+            'seller' => \App\Http\Middleware\CheckSellerRole::class,
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

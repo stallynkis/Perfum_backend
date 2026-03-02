@@ -110,15 +110,15 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/orders', [OrderController::class, 'index']);
     Route::get('/orders/customer', [OrderController::class, 'getCustomerOrders']); // Pedidos del cliente autenticado
     
-    // ========== Seller Orders (OPTIMIZADO) ==========
-    Route::get('/seller/orders', [OrderController::class, 'getSellerOrders']); // Órdenes del vendedor autenticado
-    Route::get('/seller/stats/today', [OrderController::class, 'getSellerTodayStats']); // Estadísticas del día
-    
-    // ========== Seller Customers ==========
-    Route::get('/seller/customers', [App\Http\Controllers\Api\SellerCustomerController::class, 'index']);
-    Route::post('/seller/customers', [App\Http\Controllers\Api\SellerCustomerController::class, 'store']);
-    Route::put('/seller/customers/{id}', [App\Http\Controllers\Api\SellerCustomerController::class, 'update']);
-    Route::delete('/seller/customers/{id}', [App\Http\Controllers\Api\SellerCustomerController::class, 'destroy']);
+    // ========== Rutas exclusivas de Vendedor ==========
+    Route::middleware('seller')->group(function () {
+        Route::get('/seller/orders', [OrderController::class, 'getSellerOrders']);
+        Route::get('/seller/stats/today', [OrderController::class, 'getSellerTodayStats']);
+        Route::get('/seller/customers', [App\Http\Controllers\Api\SellerCustomerController::class, 'index']);
+        Route::post('/seller/customers', [App\Http\Controllers\Api\SellerCustomerController::class, 'store']);
+        Route::put('/seller/customers/{id}', [App\Http\Controllers\Api\SellerCustomerController::class, 'update']);
+        Route::delete('/seller/customers/{id}', [App\Http\Controllers\Api\SellerCustomerController::class, 'destroy']);
+    });
     
     Route::get('/orders/{id}', [OrderController::class, 'show']);
     Route::put('/orders/{id}', [OrderController::class, 'update']);
@@ -227,7 +227,7 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     // ========== Cajas Registradoras (Seller) ==========
-    Route::prefix('seller/cash')->group(function () {
+    Route::middleware('seller')->prefix('seller/cash')->group(function () {
         Route::get('/my-register', [\App\Http\Controllers\Admin\CashRegisterController::class, 'getSellerRegister']);
         Route::get('/my-sessions', [\App\Http\Controllers\Admin\CashRegisterController::class, 'getSellerSessions']);
         Route::post('/open-session', [\App\Http\Controllers\Admin\CashRegisterController::class, 'openSession']);
