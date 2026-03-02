@@ -17,13 +17,14 @@ class SettingsController extends Controller
 
         if (!$setting) {
             return response()->json([
-                'name'    => 'HERLINSO PERFUMERÍA',
-                'ruc'     => '20123456789',
-                'address' => 'Av. Principal 123, Lima, Perú',
-                'phone'   => '+51 999 999 999',
-                'email'   => 'contacto@herlinsoperfumeria.com',
-                'website' => 'www.herlinsoperfumeria.com',
-                'slogan'  => 'La fragancia perfecta para cada momento',
+                'name'      => 'HERLINSO PERFUMERÍA',
+                'ruc'       => '20123456789',
+                'address'   => 'Av. Principal 123, Lima, Perú',
+                'phone'     => '+51 999 999 999',
+                'whatsapp'  => '51999999999',
+                'email'     => 'contacto@herlinsoperfumeria.com',
+                'website'   => 'www.herlinsoperfumeria.com',
+                'slogan'    => 'La fragancia perfecta para cada momento',
             ]);
         }
 
@@ -36,13 +37,14 @@ class SettingsController extends Controller
     public function updateBusinessInfo(Request $request)
     {
         $validated = $request->validate([
-            'name'    => 'required|string|max:100',
-            'ruc'     => 'required|string|max:11',
-            'address' => 'required|string|max:255',
-            'phone'   => 'required|string|max:50',
-            'email'   => 'nullable|email|max:100',
-            'website' => 'nullable|string|max:100',
-            'slogan'  => 'nullable|string|max:200',
+            'name'      => 'required|string|max:100',
+            'ruc'       => 'required|string|max:11',
+            'address'   => 'required|string|max:255',
+            'phone'     => 'required|string|max:50',
+            'whatsapp'  => 'nullable|string|max:20',
+            'email'     => 'nullable|email|max:100',
+            'website'   => 'nullable|string|max:100',
+            'slogan'    => 'nullable|string|max:200',
         ]);
 
         DB::table('settings')->updateOrInsert(
