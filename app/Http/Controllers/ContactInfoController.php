@@ -30,7 +30,7 @@ class ContactInfoController extends Controller
     public function update(Request $request): JsonResponse
     {
         $validator = Validator::make($request->all(), [
-            'title' => 'required|string|max:255',
+            'title' => 'nullable|string|max:255',
             'subtitle' => 'nullable|string',
             'phone' => 'nullable|string|max:20',
             'email' => 'nullable|email|max:255',
@@ -53,7 +53,7 @@ class ContactInfoController extends Controller
             ContactInfo::where('is_active', true)->update(['is_active' => false]);
             
             $contactInfo = ContactInfo::create([
-                'title' => $request->title,
+                'title' => $request->title ?? 'Información de Contacto',
                 'subtitle' => $request->subtitle,
                 'phone' => $request->phone,
                 'email' => $request->email,

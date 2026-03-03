@@ -38,10 +38,15 @@ class ProductManagementController extends Controller
                 'category' => 'required|string|max:255',
                 'brand' => 'nullable|string|max:255',
                 'image' => 'nullable|string|max:16777215',
+                'images' => 'nullable|array',
+                'images.*' => 'string|max:16777215',
                 'rating' => 'nullable|numeric|between:0,5',
                 'original_price' => 'nullable|numeric|min:0',
                 'notes' => 'nullable|array',
                 'notes.*' => 'string',
+                'decants' => 'nullable|array',
+                'decants.*.ml' => 'required_with:decants|numeric|min:1',
+                'decants.*.price' => 'required_with:decants|numeric|min:0',
                 'is_active' => 'nullable|boolean',
                 'is_featured' => 'nullable|boolean',
             ]);
@@ -61,6 +66,7 @@ class ProductManagementController extends Controller
             $data['brand'] = $data['brand'] ?? 'Sin marca';
             $data['description'] = $data['description'] ?? '';
             $data['image'] = $data['image'] ?? null;
+            $data['images'] = $data['images'] ?? null;
             
             \Log::info('ProductManagementController@store - Creando producto', ['data' => array_merge($data, ['image' => 'OMITTED'])]);
             
@@ -111,10 +117,15 @@ class ProductManagementController extends Controller
             'category' => 'sometimes|string|max:255',
             'brand' => 'sometimes|nullable|string|max:255',
             'image' => 'sometimes|nullable|string|max:16777215',
+            'images' => 'sometimes|nullable|array',
+            'images.*' => 'string|max:16777215',
             'rating' => 'sometimes|numeric|between:0,5',
             'original_price' => 'sometimes|nullable|numeric|min:0',
             'notes' => 'sometimes|nullable|array',
             'notes.*' => 'string',
+            'decants' => 'sometimes|nullable|array',
+            'decants.*.ml' => 'required_with:decants|numeric|min:1',
+            'decants.*.price' => 'required_with:decants|numeric|min:0',
             'is_active' => 'sometimes|boolean',
             'is_featured' => 'sometimes|boolean',
         ]);

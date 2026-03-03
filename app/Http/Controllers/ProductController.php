@@ -75,9 +75,14 @@ class ProductController extends Controller
                 'category' => 'required|string|max:255',
                 'brand' => 'nullable|string|max:255',
                 'image' => 'nullable|string',
+                'images' => 'nullable|array',
+                'images.*' => 'string',
                 'rating' => 'nullable|numeric|between:0,5',
                 'original_price' => 'nullable|numeric|min:0',
                 'notes' => 'nullable|array',
+                'decants' => 'nullable|array',
+                'decants.*.ml' => 'required_with:decants|numeric|min:1',
+                'decants.*.price' => 'required_with:decants|numeric|min:0',
                 'is_active' => 'nullable|boolean',
                 'is_featured' => 'nullable|boolean'
             ]);
@@ -130,9 +135,14 @@ class ProductController extends Controller
             'category' => 'sometimes|string|max:255',
             'brand' => 'nullable|string|max:255',
             'image' => 'nullable|string',
+            'images' => 'nullable|array',
+            'images.*' => 'string',
             'rating' => 'sometimes|numeric|between:0,5',
             'original_price' => 'nullable|numeric|min:0',
             'notes' => 'nullable|array',
+            'decants' => 'nullable|array',
+            'decants.*.ml' => 'required_with:decants|numeric|min:1',
+            'decants.*.price' => 'required_with:decants|numeric|min:0',
             'is_active' => 'sometimes|boolean',
             'is_featured' => 'sometimes|boolean'
         ]);

@@ -34,7 +34,7 @@ class SlideController extends Controller
 
             $validated = $request->validate([
                 'image' => 'required|string|max:16777215', // MEDIUMTEXT max
-                'title' => 'required|string|max:255',
+                'title' => 'nullable|string|max:255',
                 'subtitle' => 'nullable|string',
                 'buttonText' => 'nullable|string',
                 'buttonLink' => 'nullable|string',
@@ -43,6 +43,11 @@ class SlideController extends Controller
                 'order' => 'integer',
                 'isActive' => 'boolean'
             ]);
+
+            // Título por defecto si viene vacío
+            if (empty($validated['title'])) {
+                $validated['title'] = 'Slide';
+            }
 
             $slide = Slide::create($validated);
 

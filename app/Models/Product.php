@@ -14,12 +14,14 @@ class Product extends Model
         'category',
         'brand',
         'image',
+        'images',
         'rating',
         'original_price',
         'notes',
         'is_active',
         'is_featured',
-        'barcode'
+        'barcode',
+        'decants',
     ];
 
     protected $casts = [
@@ -29,6 +31,8 @@ class Product extends Model
         'is_active' => 'boolean',
         'is_featured' => 'boolean',
         'notes' => 'array',
+        'decants' => 'array',
+        'images' => 'array',
     ];
 
     // Relaciones
