@@ -381,7 +381,7 @@ class OrderController extends Controller
                     if ($factuFlash) {
                         $items = collect($order->items)->map(function ($item) {
                             return [
-                                'cod_producto' => $item['product_id'] ?? 'PROD',
+                                'cod_producto' => (string) ($item['id'] ?? $item['product_id'] ?? 'PROD'),
                                 'descripcion' => $item['name'] ?? $item['product_name'] ?? 'Producto',
                                 'cantidad' => $item['quantity'] ?? 1,
                                 'precio_unitario' => $item['price'] ?? $item['unit_price'] ?? 0,
@@ -389,10 +389,13 @@ class OrderController extends Controller
                             ];
                         })->toArray();
 
+                        $rawDoc = $request->customer_document ?? '';
+                        $cleanDoc = trim(preg_replace('/^(DNI|RUC|CE)\s*:\s*/i', '', $rawDoc));
+
                         if ($request->document_type === 'factura') {
                             $billingResult = $factuFlash->emitirFactura(
                                 [
-                                    'ruc' => $request->customer_document ?? '',
+                                    'ruc' => $cleanDoc,
                                     'razon_social' => $request->customer_name ?? '',
                                 ],
                                 $items,
@@ -400,8 +403,8 @@ class OrderController extends Controller
                             );
                         } else {
                             $clientData = ['nombre' => $request->customer_name ?? 'CLIENTE'];
-                            if (!empty($request->customer_document) && strlen($request->customer_document) === 8) {
-                                $clientData['dni'] = $request->customer_document;
+                            if (!empty($cleanDoc) && strlen($cleanDoc) === 8) {
+                                $clientData['dni'] = $cleanDoc;
                             } else {
                                 $clientData['num_doc'] = '-';
                             }
@@ -603,7 +606,7 @@ class OrderController extends Controller
                     // Construir items desde los productos del pedido
                     $items = collect($order->items)->map(function ($item) {
                         return [
-                            'cod_producto' => $item['product_id'] ?? 'PROD',
+                            'cod_producto' => (string) ($item['id'] ?? $item['product_id'] ?? 'PROD'),
                             'descripcion' => $item['name'] ?? $item['product_name'] ?? 'Producto',
                             'cantidad' => $item['quantity'] ?? 1,
                             'precio_unitario' => $item['price'] ?? $item['unit_price'] ?? 0,
@@ -704,7 +707,7 @@ class OrderController extends Controller
 
             $items = collect($order->items)->map(function ($item) {
                 return [
-                    'cod_producto' => $item['product_id'] ?? 'PROD',
+                    'cod_producto' => (string) ($item['id'] ?? $item['product_id'] ?? 'PROD'),
                     'descripcion' => $item['name'] ?? $item['product_name'] ?? 'Producto',
                     'cantidad' => $item['quantity'] ?? 1,
                     'precio_unitario' => $item['price'] ?? $item['unit_price'] ?? 0,
