@@ -25,10 +25,17 @@ class SettingsController extends Controller
                 'email'     => 'contacto@herlinsoperfumeria.com',
                 'website'   => 'www.herlinsoperfumeria.com',
                 'slogan'    => 'La fragancia perfecta para cada momento',
+                'instagram' => '',
+                'facebook'  => '',
+                'tiktok'    => '',
             ]);
         }
 
-        return response()->json(json_decode($setting->value, true));
+        $data = json_decode($setting->value, true);
+        // Asegurarse de que los campos nuevos existan en registros viejos
+        $data += ['instagram' => '', 'facebook' => '', 'tiktok' => ''];
+
+        return response()->json($data);
     }
 
     /**
@@ -45,6 +52,9 @@ class SettingsController extends Controller
             'email'     => 'nullable|email|max:100',
             'website'   => 'nullable|string|max:100',
             'slogan'    => 'nullable|string|max:200',
+            'instagram' => 'nullable|string|max:200',
+            'facebook'  => 'nullable|string|max:200',
+            'tiktok'    => 'nullable|string|max:200',
         ]);
 
         DB::table('settings')->updateOrInsert(
