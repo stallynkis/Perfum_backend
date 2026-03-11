@@ -265,6 +265,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::middleware('seller')->prefix('seller/cash')->group(function () {
         Route::get('/my-register', [\App\Http\Controllers\Admin\CashRegisterController::class, 'getSellerRegister']);
         Route::get('/my-sessions', [\App\Http\Controllers\Admin\CashRegisterController::class, 'getSellerSessions']);
+        Route::get('/sessions/{id}/movements', [\App\Http\Controllers\Admin\CashRegisterController::class, 'getMovements']);
         Route::post('/open-session', [\App\Http\Controllers\Admin\CashRegisterController::class, 'openSession']);
         Route::put('/close-session/{id}', [\App\Http\Controllers\Admin\CashRegisterController::class, 'closeSession']);
         Route::post('/add-movement', [\App\Http\Controllers\Admin\CashRegisterController::class, 'addMovement']);
