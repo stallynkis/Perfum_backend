@@ -80,7 +80,7 @@ class OrderController extends Controller
             'shipping_address' => 'nullable|string',
             'shipping_district' => 'nullable|string|max:100',
             'shipping_reference' => 'nullable|string',
-            'agency_type' => 'nullable|in:olva,shalom',
+            'agency_type' => 'nullable|in:olva,shalom,otros',
             'agency_id' => 'nullable|string|max:100',
             'agency_name' => 'nullable|string|max:255',
             'agency_address' => 'nullable|string',
@@ -288,25 +288,27 @@ class OrderController extends Controller
 
 
             // 🔔 CREAR NOTIFICACIÓN cuando se crea una orden
-            /*
-            \App\Models\Notification::create([
-                'type' => 'new_order',
-                'title' => '🛒 Nuevo Pedido',
-                'message' => "Pedido #{$orderNumber} - {$request->customer_name} - S/ {$request->total}",
-                'priority' => $requiresConfirmation ? 'high' : 'medium',
-                'read' => false,
-                'related_tab' => 'pedidos',
-                'order_id' => $order->id,
-                'user_id' => $order->user_id,
-                'data' => [
-                    'order_number' => $orderNumber,
-                    'customer_name' => $request->customer_name,
-                    'total' => $request->total,
-                    'payment_method' => $request->payment_method,
-                    'requires_confirmation' => $requiresConfirmation
-                ]
-            ]);
-            */
+            try {
+                \App\Models\Notification::create([
+                    'type' => 'order',
+                    'title' => '🛒 Nuevo Pedido Web',
+                    'message' => "Pedido #{$orderNumber} - {$request->customer_name} - S/ {$request->total}",
+                    'priority' => $requiresConfirmation ? 'high' : 'medium',
+                    'read' => false,
+                    'related_tab' => 'pedidos',
+                    'order_id' => $order->id,
+                    'user_id' => $order->user_id,
+                    'data' => [
+                        'order_number' => $orderNumber,
+                        'customer_name' => $request->customer_name,
+                        'total' => $request->total,
+                        'payment_method' => $request->payment_method,
+                        'requires_confirmation' => $requiresConfirmation
+                    ]
+                ]);
+            } catch (\Exception $notifEx) {
+                \Log::warning('No se pudo crear notificación de pedido: ' . $notifEx->getMessage());
+            }
 
             // � REGISTRAR MOVIMIENTO DE CAJA para ventas de vendedor
             // Usar auth('sanctum') porque POST /orders es ruta publica
