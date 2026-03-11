@@ -41,7 +41,15 @@ class Order extends Model
         'status',
         'notes',
         'admin_notes',
-        'requires_admin_confirmation'
+        'requires_admin_confirmation',
+        'document_type',
+        'billing_status',
+        'billing_number',
+        'billing_error',
+        'billing_document_id',
+        'credit_note_number',
+        'credit_note_status',
+        'credit_note_document_id'
     ];
 
     protected $casts = [
