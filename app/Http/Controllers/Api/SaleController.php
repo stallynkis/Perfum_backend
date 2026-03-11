@@ -5,8 +5,11 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Sale;
 use App\Models\Product;
+use App\Models\BillingConfig;
+use App\Services\FactuFlashService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Log;
 
 class SaleController extends Controller
 {
@@ -96,9 +99,60 @@ class SaleController extends Controller
         $sale = Sale::create($validated);
         $sale->load(['product', 'user', 'seller']);
 
+        // Emisión automática de comprobante electrónico
+        $billingResult = null;
+        if (in_array($validated['document_type'] ?? null, ['boleta', 'factura'])) {
+            try {
+                $factuFlash = FactuFlashService::make();
+                if ($factuFlash) {
+                    $items = [[
+                        'cod_producto' => $sale->product->code ?? 'PROD-' . $sale->product_id,
+                        'descripcion' => $sale->product->name,
+                        'cantidad' => $sale->quantity,
+                        'precio_unitario' => $sale->unit_price,
+                        'unidad' => 'NIU',
+                    ]];
+
+                    if ($validated['document_type'] === 'factura') {
+                        $billingResult = $factuFlash->emitirFactura(
+                            [
+                                'ruc' => $validated['customer_document'] ?? '',
+                                'razon_social' => $validated['customer_name'] ?? '',
+                            ],
+                            $items,
+                            ['origin_type' => 'sale', 'origin_id' => $sale->id]
+                        );
+                    } else {
+                        $clientData = [
+                            'nombre' => $validated['customer_name'] ?? 'Clientes Varios',
+                        ];
+                        
+                        if (!empty($validated['customer_document']) && strlen($validated['customer_document']) === 8) {
+                            $clientData['dni'] = $validated['customer_document'];
+                        } else {
+                            $clientData['num_doc'] = '-';
+                        }
+
+                        $billingResult = $factuFlash->emitirBoleta(
+                            $clientData,
+                            $items,
+                            ['origin_type' => 'sale', 'origin_id' => $sale->id]
+                        );
+                    }
+                }
+            } catch (\Exception $e) {
+                Log::error('Error al emitir comprobante electrónico: ' . $e->getMessage(), [
+                    'sale_id' => $sale->id,
+                    'document_type' => $validated['document_type'],
+                ]);
+                $billingResult = ['success' => false, 'error' => $e->getMessage()];
+            }
+        }
+
         return response()->json([
             'message' => 'Venta registrada exitosamente',
-            'sale' => $sale
+            'sale' => $sale,
+            'billing' => $billingResult,
         ], 201);
     }
 

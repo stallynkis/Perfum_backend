@@ -27,6 +27,8 @@ use App\Http\Controllers\InventoryMovementController;
 use App\Http\Controllers\User\DeliveryPreferencesController;
 use App\Http\Controllers\BrandController;
 use App\Http\Controllers\Admin\SettingsController;
+use App\Http\Controllers\Admin\BillingConfigController;
+use App\Http\Controllers\Api\BillingController;
 
 // ============================================
 // RUTAS PÚBLICAS (Sin autenticación)
@@ -127,6 +129,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/orders/{id}', [OrderController::class, 'show']);
     Route::put('/orders/{id}', [OrderController::class, 'update']);
     Route::post('/orders/{id}/confirm-payment', [OrderController::class, 'confirmPayment']);
+    Route::post('/orders/{id}/retry-billing', [OrderController::class, 'retryBilling']);
+    Route::get('/orders/{id}/billing-document', [OrderController::class, 'getBillingDocument']);
+    Route::post('/orders/{id}/credit-note', [OrderController::class, 'emitCreditNote']);
     Route::delete('/orders/{id}', [OrderController::class, 'destroy']);
 
     // ========== Información de Contacto ==========
@@ -208,6 +213,25 @@ Route::middleware('auth:sanctum')->group(function () {
 
         // Configuración del negocio (tickets)
         Route::put('settings/business', [SettingsController::class, 'updateBusinessInfo']);
+
+        // ========== Facturación Electrónica ==========
+        // Configuración
+        Route::get('billing/config', [BillingConfigController::class, 'index']);
+        Route::put('billing/config', [BillingConfigController::class, 'update']);
+        Route::get('billing/status', [BillingConfigController::class, 'status']);
+
+        // Emisión de comprobantes
+        Route::post('billing/factura', [BillingController::class, 'emitirFactura']);
+        Route::post('billing/boleta', [BillingController::class, 'emitirBoleta']);
+        Route::post('billing/nota-credito', [BillingController::class, 'emitirNotaCredito']);
+        Route::post('billing/nota-debito', [BillingController::class, 'emitirNotaDebito']);
+        Route::post('billing/comunicacion-baja', [BillingController::class, 'comunicacionBaja']);
+        Route::post('billing/resumen-diario', [BillingController::class, 'resumenDiario']);
+        Route::post('billing/consultar-estado', [BillingController::class, 'consultarEstado']);
+
+        // Listado de documentos
+        Route::get('billing/documentos', [BillingController::class, 'documentos']);
+        Route::get('billing/documentos/{id}', [BillingController::class, 'verDocumento']);
     });
 
     // ========== Cajas Registradoras (Admin) ==========

@@ -7,10 +7,14 @@ use App\Models\Order;
 use App\Models\Product;
 use App\Models\CashRegister;
 use App\Models\CashMovement;
+use App\Models\BillingDocument;
+use App\Models\BillingConfig;
 use App\Events\OrderCreated;
 use App\Events\ProductStockUpdated;
+use App\Services\FactuFlashService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 
 class OrderController extends Controller
@@ -163,12 +167,13 @@ class OrderController extends Controller
             // Create order
             $order = Order::create([
                 'order_number' => $orderNumber,
-                'user_id' => $request->user_id ?? auth()->id(),
+                'user_id' => $request->user_id ?? auth('sanctum')->id(),
                 'source' => $source,
                 'customer_name' => $request->customer_name,
                 'customer_email' => $request->customer_email,
                 'customer_phone' => $request->customer_phone,
                 'customer_document' => $request->customer_document,
+                'document_type' => $request->document_type,
                 'delivery_type' => $request->delivery_type,
                 'shipping_address' => $request->shipping_address,
                 'shipping_district' => $request->shipping_district,
@@ -368,12 +373,81 @@ class OrderController extends Controller
             // �🔴 EMITIR EVENTO: Nueva orden creada
             broadcast(new OrderCreated($order))->toOthers();
 
+            // 🧾 Emitir comprobante electrónico para ventas POS del vendedor
+            $billingResult = null;
+            if ($source === 'seller' && in_array($request->document_type, ['boleta', 'factura'])) {
+                try {
+                    $factuFlash = FactuFlashService::make();
+                    if ($factuFlash) {
+                        $items = collect($order->items)->map(function ($item) {
+                            return [
+                                'cod_producto' => $item['product_id'] ?? 'PROD',
+                                'descripcion' => $item['name'] ?? $item['product_name'] ?? 'Producto',
+                                'cantidad' => $item['quantity'] ?? 1,
+                                'precio_unitario' => $item['price'] ?? $item['unit_price'] ?? 0,
+                                'unidad' => 'NIU',
+                            ];
+                        })->toArray();
+
+                        if ($request->document_type === 'factura') {
+                            $billingResult = $factuFlash->emitirFactura(
+                                [
+                                    'ruc' => $request->customer_document ?? '',
+                                    'razon_social' => $request->customer_name ?? '',
+                                ],
+                                $items,
+                                ['origin_type' => 'order', 'origin_id' => $order->id]
+                            );
+                        } else {
+                            $clientData = ['nombre' => $request->customer_name ?? 'CLIENTE'];
+                            if (!empty($request->customer_document) && strlen($request->customer_document) === 8) {
+                                $clientData['dni'] = $request->customer_document;
+                            } else {
+                                $clientData['num_doc'] = '-';
+                            }
+                            $billingResult = $factuFlash->emitirBoleta(
+                                $clientData,
+                                $items,
+                                ['origin_type' => 'order', 'origin_id' => $order->id]
+                            );
+                        }
+
+                        Log::info('🧾 Comprobante emitido para venta POS', [
+                            'order' => $order->order_number,
+                            'tipo' => $request->document_type,
+                            'resultado' => $billingResult['success'] ?? false,
+                            'numero' => $billingResult['numero'] ?? null,
+                        ]);
+
+                        // Guardar estado de facturación en el pedido
+                        $order->update([
+                            'billing_status' => ($billingResult['success'] ?? false) ? 'emitida' : 'error',
+                            'billing_number' => $billingResult['numero'] ?? null,
+                            'billing_error' => ($billingResult['success'] ?? false) ? null : ($billingResult['error'] ?? 'Error desconocido'),
+                            'billing_document_id' => $billingResult['document']->id ?? null,
+                        ]);
+                    } else {
+                        $order->update(['billing_status' => 'no_configurado', 'billing_error' => 'Facturación no configurada']);
+                    }
+                } catch (\Exception $e) {
+                    Log::error('❌ Error al emitir comprobante POS: ' . $e->getMessage(), [
+                        'order_id' => $order->id,
+                    ]);
+                    $billingResult = ['success' => false, 'error' => $e->getMessage()];
+                    $order->update([
+                        'billing_status' => 'error',
+                        'billing_error' => $e->getMessage(),
+                    ]);
+                }
+            }
+
             DB::commit();
 
             return response()->json([
                 'success' => true,
                 'message' => 'Pedido creado exitosamente',
-                'order' => $order
+                'order' => $order,
+                'billing' => $billingResult,
             ], 201);
 
         } catch (\Exception $e) {
@@ -514,11 +588,180 @@ class OrderController extends Controller
             }
         }
 
+        // 🧾 Emitir comprobante electrónico al entregar el pedido
+        $billingResult = null;
+        if (isset($updateData['status']) && $updateData['status'] === 'delivered'
+            && in_array($order->document_type, ['boleta', 'factura'])) {
+            try {
+                $factuFlash = FactuFlashService::make();
+                if ($factuFlash) {
+                    // Extraer número de documento limpio (quitar prefijos como "DNI: ", "RUC: ")
+                    $rawDoc = $order->customer_document ?? '';
+                    $cleanDoc = preg_replace('/^(DNI|RUC|CE)\s*:\s*/i', '', $rawDoc);
+                    $cleanDoc = trim($cleanDoc);
+
+                    // Construir items desde los productos del pedido
+                    $items = collect($order->items)->map(function ($item) {
+                        return [
+                            'cod_producto' => $item['product_id'] ?? 'PROD',
+                            'descripcion' => $item['name'] ?? $item['product_name'] ?? 'Producto',
+                            'cantidad' => $item['quantity'] ?? 1,
+                            'precio_unitario' => $item['price'] ?? $item['unit_price'] ?? 0,
+                            'unidad' => 'NIU',
+                        ];
+                    })->toArray();
+
+                    if ($order->document_type === 'factura') {
+                        $billingResult = $factuFlash->emitirFactura(
+                            [
+                                'ruc' => $cleanDoc,
+                                'razon_social' => $order->customer_name ?? '',
+                            ],
+                            $items,
+                            ['origin_type' => 'order', 'origin_id' => $order->id]
+                        );
+                    } else {
+                        $clientData = [
+                            'nombre' => $order->customer_name ?? 'CLIENTE',
+                        ];
+                        if (!empty($cleanDoc) && strlen($cleanDoc) === 8) {
+                            $clientData['dni'] = $cleanDoc;
+                        } else {
+                            $clientData['num_doc'] = '-';
+                        }
+                        $billingResult = $factuFlash->emitirBoleta(
+                            $clientData,
+                            $items,
+                            ['origin_type' => 'order', 'origin_id' => $order->id]
+                        );
+                    }
+
+                    Log::info('🧾 Comprobante emitido para pedido', [
+                        'order' => $order->order_number,
+                        'tipo' => $order->document_type,
+                        'resultado' => $billingResult['success'] ?? false,
+                        'numero' => $billingResult['numero'] ?? null,
+                    ]);
+
+                    // Guardar estado de facturación en el pedido
+                    $order->update([
+                        'billing_status' => ($billingResult['success'] ?? false) ? 'emitida' : 'error',
+                        'billing_number' => $billingResult['numero'] ?? null,
+                        'billing_error' => ($billingResult['success'] ?? false) ? null : ($billingResult['error'] ?? 'Error desconocido'),
+                        'billing_document_id' => $billingResult['document']->id ?? null,
+                    ]);
+                } else {
+                    $order->update(['billing_status' => 'no_configurado', 'billing_error' => 'Facturación no configurada']);
+                }
+            } catch (\Exception $e) {
+                Log::error('❌ Error al emitir comprobante para pedido: ' . $e->getMessage(), [
+                    'order_id' => $order->id,
+                    'document_type' => $order->document_type,
+                ]);
+                $billingResult = ['success' => false, 'error' => $e->getMessage()];
+                $order->update([
+                    'billing_status' => 'error',
+                    'billing_error' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        $order->refresh();
+
         return response()->json([
             'success' => true,
             'message' => 'Pedido actualizado exitosamente',
-            'order' => $order
+            'order' => $order,
+            'billing' => $billingResult,
         ]);
+    }
+
+    /**
+     * Retry billing for an order (admin only)
+     */
+    public function retryBilling($id)
+    {
+        $order = Order::find($id);
+
+        if (!$order) {
+            return response()->json(['success' => false, 'message' => 'Pedido no encontrado'], 404);
+        }
+
+        if (!in_array($order->document_type, ['boleta', 'factura'])) {
+            return response()->json(['success' => false, 'message' => 'El pedido no tiene tipo de documento asignado'], 400);
+        }
+
+        $billingResult = null;
+        try {
+            $factuFlash = FactuFlashService::make();
+            if (!$factuFlash) {
+                $order->update(['billing_status' => 'no_configurado', 'billing_error' => 'Facturación no configurada']);
+                return response()->json(['success' => false, 'message' => 'Facturación no configurada'], 400);
+            }
+
+            $rawDoc = $order->customer_document ?? '';
+            $cleanDoc = trim(preg_replace('/^(DNI|RUC|CE)\s*:\s*/i', '', $rawDoc));
+
+            $items = collect($order->items)->map(function ($item) {
+                return [
+                    'cod_producto' => $item['product_id'] ?? 'PROD',
+                    'descripcion' => $item['name'] ?? $item['product_name'] ?? 'Producto',
+                    'cantidad' => $item['quantity'] ?? 1,
+                    'precio_unitario' => $item['price'] ?? $item['unit_price'] ?? 0,
+                    'unidad' => 'NIU',
+                ];
+            })->toArray();
+
+            if ($order->document_type === 'factura') {
+                $billingResult = $factuFlash->emitirFactura(
+                    ['ruc' => $cleanDoc, 'razon_social' => $order->customer_name ?? ''],
+                    $items,
+                    ['origin_type' => 'order', 'origin_id' => $order->id]
+                );
+            } else {
+                $clientData = ['nombre' => $order->customer_name ?? 'CLIENTE'];
+                if (!empty($cleanDoc) && strlen($cleanDoc) === 8) {
+                    $clientData['dni'] = $cleanDoc;
+                } else {
+                    $clientData['num_doc'] = '-';
+                }
+                $billingResult = $factuFlash->emitirBoleta(
+                    $clientData,
+                    $items,
+                    ['origin_type' => 'order', 'origin_id' => $order->id]
+                );
+            }
+
+            $order->update([
+                'billing_status' => ($billingResult['success'] ?? false) ? 'emitida' : 'error',
+                'billing_number' => $billingResult['numero'] ?? null,
+                'billing_error' => ($billingResult['success'] ?? false) ? null : ($billingResult['error'] ?? 'Error desconocido'),
+                'billing_document_id' => $billingResult['document']->id ?? null,
+            ]);
+
+            Log::info('🧾 Reintento de comprobante', [
+                'order' => $order->order_number,
+                'resultado' => $billingResult['success'] ?? false,
+            ]);
+
+            $order->refresh();
+
+            return response()->json([
+                'success' => $billingResult['success'] ?? false,
+                'message' => ($billingResult['success'] ?? false) ? 'Comprobante emitido exitosamente' : 'Error al emitir comprobante',
+                'order' => $order,
+                'billing' => $billingResult,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('❌ Error al reintentar comprobante: ' . $e->getMessage());
+            $order->update(['billing_status' => 'error', 'billing_error' => $e->getMessage()]);
+            $order->refresh();
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al emitir: ' . $e->getMessage(),
+                'order' => $order,
+            ], 500);
+        }
     }
 
     /**
@@ -608,6 +851,151 @@ class OrderController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Error al cancelar el pedido: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get billing document data for an order (for receipt/download)
+     */
+    public function getBillingDocument($id)
+    {
+        $order = Order::find($id);
+        if (!$order) {
+            return response()->json(['success' => false, 'message' => 'Pedido no encontrado'], 404);
+        }
+
+        if ($order->billing_status !== 'emitida' || !$order->billing_document_id) {
+            return response()->json(['success' => false, 'message' => 'Este pedido no tiene comprobante emitido'], 400);
+        }
+
+        $billingDoc = BillingDocument::find($order->billing_document_id);
+        if (!$billingDoc) {
+            return response()->json(['success' => false, 'message' => 'Documento de facturación no encontrado'], 404);
+        }
+
+        $config = BillingConfig::getActive();
+
+        return response()->json([
+            'success' => true,
+            'document' => $billingDoc,
+            'order' => [
+                'id' => $order->id,
+                'order_number' => $order->order_number,
+                'customer_name' => $order->customer_name,
+                'customer_document' => $order->customer_document,
+                'total' => $order->total,
+                'items' => $order->items,
+                'created_at' => $order->created_at,
+            ],
+            'business' => $config ? [
+                'ruc' => $config->ruc,
+                'razon_social' => $config->razon_social,
+                'nombre_comercial' => $config->nombre_comercial,
+                'direccion' => $config->direccion,
+            ] : null,
+        ]);
+    }
+
+    /**
+     * Emit credit note for an order with emitted billing
+     */
+    public function emitCreditNote(Request $request, $id)
+    {
+        $order = Order::find($id);
+        if (!$order) {
+            return response()->json(['success' => false, 'message' => 'Pedido no encontrado'], 404);
+        }
+
+        if ($order->billing_status !== 'emitida' || !$order->billing_number) {
+            return response()->json(['success' => false, 'message' => 'Este pedido no tiene comprobante emitido'], 400);
+        }
+
+        if ($order->credit_note_status === 'emitida') {
+            return response()->json(['success' => false, 'message' => 'Ya existe una nota de crédito emitida para este pedido'], 400);
+        }
+
+        $motivo = $request->input('motivo', 'Anulación de la operación');
+        $codMotivo = $request->input('cod_motivo', '01'); // 01 = Anulación
+
+        try {
+            $factuFlash = FactuFlashService::make();
+            if (!$factuFlash) {
+                return response()->json(['success' => false, 'message' => 'Facturación no configurada'], 400);
+            }
+
+            // Determine tipo_doc_afectado from document_type
+            $tipoDocAfectado = $order->document_type === 'factura' ? '01' : '03';
+
+            // Build client data
+            $rawDoc = $order->customer_document ?? '';
+            $cleanDoc = trim(preg_replace('/^(DNI|RUC|CE)\s*:\s*/i', '', $rawDoc));
+
+            $clientData = [
+                'num_doc' => !empty($cleanDoc) ? $cleanDoc : '-',
+                'razon_social' => $order->customer_name ?? 'CLIENTE',
+            ];
+
+            if ($order->document_type === 'factura') {
+                $clientData['ruc'] = $cleanDoc;
+            } else {
+                $clientData['dni'] = $cleanDoc;
+                $clientData['nombre'] = $order->customer_name ?? 'CLIENTE';
+            }
+
+            // Build items from order
+            $items = collect($order->items)->map(function ($item) {
+                return [
+                    'cod_producto' => $item['product_id'] ?? $item['id'] ?? 'PROD',
+                    'descripcion' => $item['name'] ?? $item['product_name'] ?? 'Producto',
+                    'cantidad' => $item['quantity'] ?? 1,
+                    'precio_unitario' => $item['price'] ?? $item['unit_price'] ?? 0,
+                    'unidad' => 'NIU',
+                ];
+            })->toArray();
+
+            $result = $factuFlash->emitirNotaCredito(
+                $tipoDocAfectado,
+                $order->billing_number,
+                $codMotivo,
+                $motivo,
+                $clientData,
+                $items,
+                ['origin_type' => 'order', 'origin_id' => $order->id]
+            );
+
+            $order->update([
+                'credit_note_number' => $result['numero'] ?? null,
+                'credit_note_status' => ($result['success'] ?? false) ? 'emitida' : 'error',
+                'credit_note_document_id' => $result['document']->id ?? null,
+            ]);
+
+            Log::info('📝 Nota de crédito emitida', [
+                'order' => $order->order_number,
+                'billing_number' => $order->billing_number,
+                'credit_note' => $result['numero'] ?? null,
+                'success' => $result['success'] ?? false,
+            ]);
+
+            $order->refresh();
+
+            return response()->json([
+                'success' => $result['success'] ?? false,
+                'message' => ($result['success'] ?? false)
+                    ? 'Nota de crédito emitida exitosamente: ' . ($result['numero'] ?? '')
+                    : 'Error al emitir nota de crédito: ' . ($result['error'] ?? 'Error desconocido'),
+                'order' => $order,
+                'credit_note' => $result,
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('❌ Error al emitir nota de crédito: ' . $e->getMessage());
+            $order->update(['credit_note_status' => 'error']);
+            $order->refresh();
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al emitir nota de crédito: ' . $e->getMessage(),
+                'order' => $order,
             ], 500);
         }
     }
