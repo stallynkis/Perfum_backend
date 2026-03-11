@@ -439,10 +439,14 @@ class OrderController extends Controller
                         'order_id' => $order->id,
                     ]);
                     $billingResult = ['success' => false, 'error' => $e->getMessage()];
-                    $order->update([
-                        'billing_status' => 'error',
-                        'billing_error' => $e->getMessage(),
-                    ]);
+                    try {
+                        $order->update([
+                            'billing_status' => 'error',
+                            'billing_error' => $e->getMessage(),
+                        ]);
+                    } catch (\Exception $ignored) {
+                        Log::warning('No se pudo guardar billing_status en orden: ' . $ignored->getMessage());
+                    }
                 }
             }
 
@@ -664,10 +668,14 @@ class OrderController extends Controller
                     'document_type' => $order->document_type,
                 ]);
                 $billingResult = ['success' => false, 'error' => $e->getMessage()];
-                $order->update([
-                    'billing_status' => 'error',
-                    'billing_error' => $e->getMessage(),
-                ]);
+                try {
+                    $order->update([
+                        'billing_status' => 'error',
+                        'billing_error' => $e->getMessage(),
+                    ]);
+                } catch (\Exception $ignored) {
+                    Log::warning('No se pudo guardar billing_status en orden: ' . $ignored->getMessage());
+                }
             }
         }
 
