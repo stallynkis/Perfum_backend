@@ -9,12 +9,11 @@ use App\Models\CashRegister;
 use App\Models\CashMovement;
 use App\Models\BillingDocument;
 use App\Models\BillingConfig;
-use App\Events\OrderCreated;
-use App\Events\ProductStockUpdated;
 use App\Services\FactuFlashService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Validator;
 
 class OrderController extends Controller
@@ -140,9 +139,6 @@ class OrderController extends Controller
                 // Refrescar modelo para obtener nuevo stock
                 $product->refresh();
 
-                // 🔴 EMITIR EVENTO: Stock actualizado en tiempo real
-                broadcast(new ProductStockUpdated($product, $oldStock, $product->stock))->toOthers();
-
                 // Add to order items
                 $orderItems[] = [
                     'id' => $product->id,
@@ -186,6 +182,7 @@ class OrderController extends Controller
                 'subtotal' => $request->subtotal,
                 'tax' => $request->tax ?? 0,
                 'shipping_cost' => $request->shipping_cost ?? 0,
+                'shipping_cost_updated_by_admin' => $request->has('shipping_cost'),
                 'total' => $request->total,
                 'payment_method' => $request->payment_method,
                 'transaction_id' => $request->transaction_id,
@@ -372,9 +369,6 @@ class OrderController extends Controller
                 }
             }
 
-            // �🔴 EMITIR EVENTO: Nueva orden creada
-            broadcast(new OrderCreated($order))->toOthers();
-
             // 🧾 Emitir comprobante electrónico para ventas POS del vendedor
             $billingResult = null;
             if ($source === 'seller' && in_array($request->document_type, ['boleta', 'factura'])) {
@@ -546,24 +540,45 @@ class OrderController extends Controller
 
         // Si se proporciona tracking, agregarlo
         if ($request->has('tracking_number')) {
-            $updateData['tracking_number'] = $request->tracking_number;
+            $updateData['tracking_number'] = $request->filled('tracking_number')
+                ? trim((string) $request->tracking_number)
+                : null;
         }
         
         if ($request->has('tracking_order_number')) {
-            $updateData['tracking_order_number'] = $request->tracking_order_number;
+            $updateData['tracking_order_number'] = $request->filled('tracking_order_number')
+                ? trim((string) $request->tracking_order_number)
+                : null;
         }
 
         // Si se proporciona costo de envío, agregarlo y recalcular el total
         if ($request->has('shipping_cost')) {
-            $newShippingCost = $request->shipping_cost;
+            $newShippingCost = (float) $request->shipping_cost;
             $updateData['shipping_cost'] = $newShippingCost;
+            $updateData['shipping_cost_updated_by_admin'] = true;
             
             // Recalcular el total: subtotal + tax + shipping_cost
             $updateData['total'] = $order->subtotal + $order->tax + $newShippingCost;
         }
 
-        // Si se cambia a "shipped", guardar la fecha de envío
+        // Si se cambia a "shipped", guardar la fecha de envío solo si la columna existe.
+        // Evita romper en entornos sqlite antiguos donde no se aplicó la migración.
         if ($request->status === 'shipped' && $order->status !== 'shipped') {
+            if (Schema::hasColumn('orders', 'shipped_at')) {
+                $updateData['shipped_at'] = now();
+            } else {
+                Log::warning('No se pudo guardar shipped_at: columna inexistente en tabla orders', [
+                    'order_id' => $order->id,
+                    'status' => $request->status,
+                ]);
+            }
+        }
+
+        // Si se registran datos de guía/orden, asegurar marca de fecha de envío (si existe columna).
+        if ((array_key_exists('tracking_number', $updateData) || array_key_exists('tracking_order_number', $updateData))
+            && Schema::hasColumn('orders', 'shipped_at')
+            && empty($updateData['shipped_at'])
+            && !$order->shipped_at) {
             $updateData['shipped_at'] = now();
         }
 
@@ -599,8 +614,7 @@ class OrderController extends Controller
 
         // 🧾 Emitir comprobante electrónico al entregar el pedido
         $billingResult = null;
-        if (isset($updateData['status']) && $updateData['status'] === 'delivered'
-            && in_array($order->document_type, ['boleta', 'factura'])) {
+        if (isset($updateData['status']) && $updateData['status'] === 'delivered') {
             try {
                 $factuFlash = FactuFlashService::make();
                 if ($factuFlash) {
@@ -608,6 +622,15 @@ class OrderController extends Controller
                     $rawDoc = $order->customer_document ?? '';
                     $cleanDoc = preg_replace('/^(DNI|RUC|CE)\s*:\s*/i', '', $rawDoc);
                     $cleanDoc = trim($cleanDoc);
+                    $cleanDoc = preg_replace('/\D+/', '', $cleanDoc);
+
+                    // SUNAT: RUC (11 dígitos) => Factura, caso contrario => Boleta
+                    $documentType = strlen($cleanDoc) === 11 ? 'factura' : 'boleta';
+
+                    if ($order->document_type !== $documentType) {
+                        $order->document_type = $documentType;
+                        $order->save();
+                    }
 
                     // Construir items desde los productos del pedido
                     $items = collect($order->items)->map(function ($item) {
@@ -620,7 +643,7 @@ class OrderController extends Controller
                         ];
                     })->toArray();
 
-                    if ($order->document_type === 'factura') {
+                    if ($documentType === 'factura') {
                         $billingResult = $factuFlash->emitirFactura(
                             [
                                 'ruc' => $cleanDoc,
@@ -647,7 +670,7 @@ class OrderController extends Controller
 
                     Log::info('🧾 Comprobante emitido para pedido', [
                         'order' => $order->order_number,
-                        'tipo' => $order->document_type,
+                        'tipo' => $documentType,
                         'resultado' => $billingResult['success'] ?? false,
                         'numero' => $billingResult['numero'] ?? null,
                     ]);
@@ -692,16 +715,12 @@ class OrderController extends Controller
     /**
      * Retry billing for an order (admin only)
      */
-    public function retryBilling($id)
+    public function retryBilling(Request $request, $id)
     {
         $order = Order::find($id);
 
         if (!$order) {
             return response()->json(['success' => false, 'message' => 'Pedido no encontrado'], 404);
-        }
-
-        if (!in_array($order->document_type, ['boleta', 'factura'])) {
-            return response()->json(['success' => false, 'message' => 'El pedido no tiene tipo de documento asignado'], 400);
         }
 
         $billingResult = null;
@@ -714,6 +733,19 @@ class OrderController extends Controller
 
             $rawDoc = $order->customer_document ?? '';
             $cleanDoc = trim(preg_replace('/^(DNI|RUC|CE)\s*:\s*/i', '', $rawDoc));
+            $cleanDoc = preg_replace('/\D+/', '', $cleanDoc);
+
+            $requestDocumentType = $request->input('document_type');
+            $detectedDocumentType = strlen($cleanDoc) === 11 ? 'factura' : 'boleta';
+
+            $documentType = in_array($requestDocumentType, ['boleta', 'factura'], true)
+                ? $requestDocumentType
+                : $detectedDocumentType;
+
+            if ($order->document_type !== $documentType) {
+                $order->document_type = $documentType;
+                $order->save();
+            }
 
             $items = collect($order->items)->map(function ($item) {
                 return [
@@ -725,7 +757,14 @@ class OrderController extends Controller
                 ];
             })->toArray();
 
-            if ($order->document_type === 'factura') {
+            if ($documentType === 'factura') {
+                if (strlen($cleanDoc) !== 11) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Para emitir factura se requiere RUC válido de 11 dígitos'
+                    ], 400);
+                }
+
                 $billingResult = $factuFlash->emitirFactura(
                     ['ruc' => $cleanDoc, 'razon_social' => $order->customer_name ?? ''],
                     $items,
@@ -754,6 +793,7 @@ class OrderController extends Controller
 
             Log::info('🧾 Reintento de comprobante', [
                 'order' => $order->order_number,
+                'document_type' => $documentType,
                 'resultado' => $billingResult['success'] ?? false,
             ]);
 
