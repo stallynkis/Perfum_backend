@@ -399,25 +399,54 @@ class FactuFlashService
      */
     private function makeRequest(string $endpoint, array $data): array
     {
-        // URL: {baseUrl}/sunat/{RUC}/{endpoint}
-        $ruc = $this->config->ruc;
-        $url = "{$this->baseUrl}/sunat/{$ruc}/{$endpoint}";
+        // Algunas cuentas/API usan /sunat/{ruc}/{endpoint} y otras /{endpoint}.
+        // Probamos rutas compatibles para evitar fallos 405 por configuración de URL base.
+        $urls = $this->buildRequestUrls($endpoint);
+        $lastError = null;
 
-        Log::info('🌐 FactuFlash request', ['url' => $url, 'endpoint' => $endpoint]);
+        foreach ($urls as $url) {
+            Log::info('🌐 FactuFlash request', ['url' => $url, 'endpoint' => $endpoint]);
 
-        $response = Http::withHeaders([
-            'Authorization' => "Bearer {$this->token}",
-            'Content-Type' => 'application/json',
-            'Accept' => 'application/json',
-        ])->timeout(30)->post($url, $data);
+            $response = Http::withHeaders([
+                'Authorization' => "Bearer {$this->token}",
+                'Content-Type' => 'application/json',
+                'Accept' => 'application/json',
+            ])->timeout(30)->post($url, $data);
 
-        Log::info('🌐 FactuFlash response', ['status' => $response->status(), 'body' => substr($response->body(), 0, 500)]);
+            Log::info('🌐 FactuFlash response', [
+                'url' => $url,
+                'status' => $response->status(),
+                'body' => substr($response->body(), 0, 500),
+            ]);
 
-        if ($response->failed()) {
-            throw new \Exception("Error HTTP {$response->status()}: {$response->body()}");
+            if ($response->successful()) {
+                return $response->json() ?? [];
+            }
+
+            $lastError = "Error HTTP {$response->status()}: {$response->body()}";
+
+            // Si el backend remoto responde 405/404 en esta ruta, probamos la siguiente variante.
+            if (!in_array($response->status(), [404, 405], true)) {
+                throw new \Exception($lastError);
+            }
         }
 
-        return $response->json() ?? [];
+        throw new \Exception($lastError ?? 'No se pudo conectar con FactuFlash');
+    }
+
+    /**
+     * Genera rutas candidatas para soportar distintas versiones de la API FactuFlash.
+     */
+    private function buildRequestUrls(string $endpoint): array
+    {
+        $ruc = $this->config->ruc;
+        $urls = [
+            "{$this->baseUrl}/sunat/{$ruc}/{$endpoint}",
+            "{$this->baseUrl}/{$endpoint}",
+        ];
+
+        // Evitar requests duplicados cuando api_url ya incluye una ruta específica.
+        return array_values(array_unique($urls));
     }
 
     /**

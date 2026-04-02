@@ -67,6 +67,8 @@ class BillingConfigController extends Controller
             'modo_pruebas' => 'required|boolean',
         ]);
 
+        $validated['api_url'] = $this->normalizeApiUrl($validated['api_url']);
+
         $config = BillingConfig::first();
 
         if ($config) {
@@ -168,5 +170,19 @@ class BillingConfigController extends Controller
             'enviar_automatico' => false,
             'modo_pruebas' => true,
         ];
+    }
+
+    /**
+     * Normaliza la URL base de la API para evitar que se guarden endpoints completos.
+     */
+    private function normalizeApiUrl(string $apiUrl): string
+    {
+        $apiUrl = rtrim($apiUrl, '/');
+
+        // Si pegan una ruta completa de emisión, la reducimos a la base esperada.
+        $apiUrl = preg_replace('#/sunat/[^/]+/.+$#i', '', $apiUrl) ?? $apiUrl;
+        $apiUrl = preg_replace('#/(generate-invoice|generate-note|generate-voided|generate-daily-summary|get-status-summary)$#i', '', $apiUrl) ?? $apiUrl;
+
+        return rtrim($apiUrl, '/');
     }
 }
