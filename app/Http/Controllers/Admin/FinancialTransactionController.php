@@ -3,12 +3,37 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\CashRegister;
 use App\Models\FinancialTransaction;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class FinancialTransactionController extends Controller
 {
+    private function resolveCollectionRegister(): CashRegister
+    {
+        $collection = CashRegister::where('is_collection_box', true)->first();
+        if ($collection) {
+            return $collection;
+        }
+
+        $candidate = CashRegister::where('is_active', true)->orderBy('id')->first();
+        if ($candidate) {
+            CashRegister::where('id', '!=', $candidate->id)->update(['is_collection_box' => false]);
+            $candidate->update(['is_collection_box' => true]);
+            return $candidate->fresh();
+        }
+
+        return CashRegister::create([
+            'name' => 'CAJA RECAUDADORA',
+            'code' => 'REC-' . now()->format('YmdHis'),
+            'responsible_user_id' => null,
+            'is_active' => true,
+            'is_collection_box' => true,
+            'current_balance' => 0,
+        ]);
+    }
+
     // Obtener todas las transacciones con filtros
     public function index(Request $request)
     {
@@ -63,12 +88,33 @@ class FinancialTransactionController extends Controller
                 'transaction_date' => 'required|date'
             ]);
 
+            if ($validated['category'] === 'negocio' && empty($validated['cash_register_id'])) {
+                $validated['cash_register_id'] = $this->resolveCollectionRegister()->id;
+            }
+
             // Agregar user_id del usuario autenticado (nullable)
             if (auth()->check()) {
                 $validated['user_id'] = auth()->id();
             }
 
-            $transaction = FinancialTransaction::create($validated);
+            $transaction = DB::transaction(function () use ($validated) {
+                $tx = FinancialTransaction::create($validated);
+
+                // Si es movimiento de negocio asociado a caja, reflejarlo en saldo de recaudadora.
+                if (($validated['category'] ?? null) === 'negocio' && !empty($validated['cash_register_id'])) {
+                    $register = CashRegister::lockForUpdate()->find($validated['cash_register_id']);
+                    if ($register) {
+                        $amount = (float) ($validated['amount'] ?? 0);
+                        if (($validated['type'] ?? null) === 'income') {
+                            $register->increment('current_balance', $amount);
+                        } elseif (in_array(($validated['type'] ?? ''), ['expense', 'withdrawal'], true)) {
+                            $register->decrement('current_balance', $amount);
+                        }
+                    }
+                }
+
+                return $tx;
+            });
 
             \Log::info('✅ Transacción creada', ['id' => $transaction->id]);
 

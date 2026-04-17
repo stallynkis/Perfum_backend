@@ -6,11 +6,79 @@ use App\Http\Controllers\Controller;
 use App\Models\CashRegister;
 use App\Models\CashSession;
 use App\Models\CashMovement;
+use App\Models\FinancialTransaction;
 use App\Models\Order;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class CashRegisterController extends Controller
 {
+    private function resolveCollectionRegister(?int $sourceRegisterId = null): CashRegister
+    {
+        // Si la caja origen ya es recaudadora, úsala directamente.
+        if ($sourceRegisterId) {
+            $source = CashRegister::find($sourceRegisterId);
+            if ($source && $source->is_collection_box) {
+                return $source;
+            }
+        }
+
+        $collection = CashRegister::where('is_collection_box', true)->first();
+        if ($collection) {
+            return $collection;
+        }
+
+        // Si no existe caja recaudadora, tomar una activa y marcarla automáticamente.
+        $candidate = CashRegister::where('is_active', true)->orderBy('id')->first();
+        if ($candidate) {
+            CashRegister::where('id', '!=', $candidate->id)->update(['is_collection_box' => false]);
+            $candidate->update(['is_collection_box' => true]);
+            return $candidate->fresh();
+        }
+
+        // Último fallback: crear caja recaudadora por defecto.
+        return CashRegister::create([
+            'name' => 'CAJA RECAUDADORA',
+            'code' => 'REC-' . now()->format('YmdHis'),
+            'responsible_user_id' => null,
+            'is_active' => true,
+            'is_collection_box' => true,
+            'current_balance' => 0,
+        ]);
+    }
+
+    private function ensureOpenSessionForCollection(CashRegister $collectionRegister, int $userId): CashSession
+    {
+        $session = $collectionRegister->currentSession();
+        if ($session) {
+            return $session;
+        }
+
+        $openingAmount = (float) ($collectionRegister->current_balance ?? 0);
+
+        $session = CashSession::create([
+            'cash_register_id' => $collectionRegister->id,
+            'user_id' => $userId,
+            'opening_date' => now(),
+            'opening_amount' => $openingAmount,
+            'expected_amount' => $openingAmount,
+            'status' => 'open',
+            'notes' => 'Sesión automática de caja recaudadora',
+        ]);
+
+        if ($openingAmount > 0) {
+            CashMovement::create([
+                'cash_session_id' => $session->id,
+                'type' => 'opening',
+                'amount' => $openingAmount,
+                'description' => 'Apertura automática de caja recaudadora',
+                'user_id' => $userId,
+            ]);
+        }
+
+        return $session;
+    }
+
     // ========== CASH REGISTERS ==========
     
     public function index()
@@ -57,6 +125,10 @@ class CashRegisterController extends Controller
         }
 
         $register = CashRegister::create($validated);
+
+        if (!empty($validated['is_collection_box'])) {
+            CashRegister::where('id', '!=', $register->id)->update(['is_collection_box' => false]);
+        }
         
         return response()->json([
             'message' => 'Caja registrada exitosamente',
@@ -84,6 +156,11 @@ class CashRegisterController extends Controller
         ]);
 
         $register->update($validated);
+
+        if (!empty($validated['is_collection_box'])) {
+            CashRegister::where('id', '!=', $register->id)->update(['is_collection_box' => false]);
+            $register->refresh();
+        }
         
         return response()->json([
             'message' => 'Caja actualizada exitosamente',
@@ -165,7 +242,7 @@ class CashRegisterController extends Controller
 
     public function closeSession(Request $request, $sessionId)
     {
-        $session = CashSession::findOrFail($sessionId);
+        $session = CashSession::with('cashRegister')->findOrFail($sessionId);
 
         if ($session->status === 'closed') {
             return response()->json([
@@ -178,25 +255,84 @@ class CashRegisterController extends Controller
             'notes' => 'nullable|string'
         ]);
 
-        $session->update([
-            'closing_date' => now(),
-            'closing_amount' => $validated['closing_amount'],
-            'difference' => $validated['closing_amount'] - $session->expected_amount,
-            'status' => 'closed',
-            'notes' => ($session->notes ?? '') . "\n" . ($validated['notes'] ?? '')
-        ]);
+        $userId = (int) $request->user()->id;
 
-        // Actualizar el balance de la caja registradora
-        $register = $session->cashRegister;
-        if ($register) {
-            $register->update([
-                'current_balance' => $validated['closing_amount']
+        $payload = DB::transaction(function () use ($session, $validated, $userId) {
+            $closingAmount = (float) $validated['closing_amount'];
+            $sourceRegister = $session->cashRegister;
+            $sourceIsCollection = (bool) ($sourceRegister?->is_collection_box);
+
+            $session->update([
+                'closing_date' => now(),
+                'closing_amount' => $closingAmount,
+                'difference' => $closingAmount - (float) $session->expected_amount,
+                'status' => 'closed',
+                'notes' => trim(($session->notes ?? '') . "\n" . ($validated['notes'] ?? '')),
             ]);
-        }
+
+            // Mantener balance de la caja fuente según el cierre.
+            if ($sourceRegister) {
+                $sourceRegister->update([
+                    'current_balance' => $closingAmount,
+                ]);
+            }
+
+            $transfer = null;
+
+            if ($closingAmount > 0 && !$sourceIsCollection) {
+                $collectionRegister = $this->resolveCollectionRegister();
+                $collectionSession = $this->ensureOpenSessionForCollection($collectionRegister, $userId);
+
+                // Registrar ingreso en movimientos de caja recaudadora.
+                CashMovement::create([
+                    'cash_session_id' => $collectionSession->id,
+                    'type' => 'income',
+                    'amount' => $closingAmount,
+                    'description' => 'Transferencia automática por cierre de caja ' . ($sourceRegister?->name ?? ('#' . $session->cash_register_id)),
+                    'reference_id' => $session->id,
+                    'reference_type' => 'cash_closure_transfer',
+                    'user_id' => $userId,
+                    'payment_method' => 'cash',
+                ]);
+
+                $collectionSession->increment('expected_amount', $closingAmount);
+                $collectionRegister->increment('current_balance', $closingAmount);
+
+                // Registrar ingreso financiero para panel Negocio.
+                FinancialTransaction::create([
+                    'type' => 'income',
+                    'category' => 'negocio',
+                    'amount' => $closingAmount,
+                    'description' => 'Ingreso por cierre de caja ' . ($sourceRegister?->name ?? ('#' . $session->cash_register_id)),
+                    'cash_register_id' => $collectionRegister->id,
+                    'user_id' => $userId,
+                    'transaction_date' => now()->toDateString(),
+                ]);
+
+                $transfer = [
+                    'collection_register_id' => $collectionRegister->id,
+                    'collection_register_name' => $collectionRegister->name,
+                    'amount' => $closingAmount,
+                ];
+            } elseif ($closingAmount > 0 && $sourceIsCollection) {
+                $transfer = [
+                    'collection_register_id' => $sourceRegister->id,
+                    'collection_register_name' => $sourceRegister->name,
+                    'amount' => $closingAmount,
+                    'self_transfer' => true,
+                ];
+            }
+
+            return [
+                'session' => $session->fresh()->load(['cashRegister', 'user']),
+                'transfer' => $transfer,
+            ];
+        });
 
         return response()->json([
             'message' => 'Sesión cerrada exitosamente',
-            'session' => $session->load(['cashRegister', 'user'])
+            'session' => $payload['session'],
+            'transfer' => $payload['transfer'],
         ]);
     }
 
@@ -226,7 +362,11 @@ class CashRegisterController extends Controller
             'seller_id' => 'nullable|exists:users,id',
             'customer_name' => 'nullable|string',
             'customer_document' => 'nullable|string',
-            'payment_method' => 'nullable|in:cash,card,yape,transfer',
+            'payment_method' => 'nullable|in:cash,card,yape,plin,transfer,mixed',
+            'payment_breakdown' => 'nullable|array',
+            'payment_reference' => 'nullable|string|max:255',
+            'cash_received' => 'nullable|numeric|min:0',
+            'change_amount' => 'nullable|numeric|min:0',
             'document_type' => 'nullable|in:ticket,boleta,factura'
         ]);
 

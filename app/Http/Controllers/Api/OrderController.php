@@ -15,6 +15,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\ValidationException;
 
 class OrderController extends Controller
 {
@@ -90,11 +91,20 @@ class OrderController extends Controller
             'items' => 'required|array|min:1',
             'items.*.id' => 'required|exists:products,id',
             'items.*.quantity' => 'required|integer|min:1',
+            'items.*.decant_ml' => 'nullable|numeric|min:1',
+            'items.*.decant_price' => 'nullable|numeric|min:0',
             'subtotal' => 'required|numeric|min:0',
             'tax' => 'nullable|numeric|min:0',
             'shipping_cost' => 'nullable|numeric|min:0',
             'total' => 'required|numeric|min:0',
-            'payment_method' => 'required|in:paypal,yape,cash,card,transfer,mixed',
+            'payment_method' => 'required|in:paypal,yape,plin,cash,card,transfer,mixed',
+            'payment_breakdown' => 'nullable|array|min:1',
+            'payment_breakdown.*.method' => 'required_with:payment_breakdown|in:cash,card,yape,plin,transfer',
+            'payment_breakdown.*.amount' => 'required_with:payment_breakdown|numeric|min:0.01',
+            'payment_breakdown.*.reference' => 'nullable|string|max:255',
+            'payment_breakdown.*.cash_received' => 'nullable|numeric|min:0',
+            'cash_received' => 'nullable|numeric|min:0',
+            'change_amount' => 'nullable|numeric|min:0',
             'payment_status' => 'nullable|in:pending,paid,failed,refunded',
             'status' => 'nullable|in:pending,processing,shipped,delivered,cancelled,completed',
             'transaction_id' => 'nullable|string|max:255',
@@ -125,30 +135,56 @@ class OrderController extends Controller
                     throw new \Exception("Producto con ID {$item['id']} no encontrado");
                 }
 
-                // Check stock
-                if ($product->stock < $item['quantity']) {
-                    throw new \Exception("Stock insuficiente para {$product->name}. Disponible: {$product->stock}");
+                $isDecant = isset($item['decant_ml']) && $item['decant_ml'] !== null;
+                $decantMl = $isDecant ? (float) $item['decant_ml'] : null;
+                $unitPrice = (float) $product->price;
+                $resolvedDecant = null;
+
+                if ($isDecant) {
+                    $decants = collect($product->decants ?? [])->map(function ($decant) {
+                        return is_array($decant) ? $decant : [];
+                    })->values();
+
+                    $decantIndex = $decants->search(function ($decant) use ($decantMl) {
+                        return isset($decant['ml']) && (float) $decant['ml'] === (float) $decantMl;
+                    });
+
+                    if ($decantIndex === false) {
+                        throw ValidationException::withMessages([
+                            'items' => ["La presentación {$decantMl}ml no existe para {$product->name}."],
+                        ]);
+                    }
+
+                    $resolvedDecant = $decants[$decantIndex];
+                    $unitPrice = isset($item['decant_price'])
+                        ? (float) $item['decant_price']
+                        : (float) ($resolvedDecant['price'] ?? $product->price);
+
+                    // Regla de negocio: los decants NO consumen stock.
+                } else {
+                    // Presentación botella/caja: stock general de producto.
+                    if ($product->stock < $item['quantity']) {
+                        throw ValidationException::withMessages([
+                            'items' => ["Stock insuficiente para {$product->name} (botella/caja). Disponible: {$product->stock}"],
+                        ]);
+                    }
+
+                    $product->decrement('stock', $item['quantity']);
+                    $product->refresh();
                 }
-
-                // Guardar stock anterior
-                $oldStock = $product->stock;
-
-                // Reduce stock
-                $product->decrement('stock', $item['quantity']);
-                
-                // Refrescar modelo para obtener nuevo stock
-                $product->refresh();
 
                 // Add to order items
                 $orderItems[] = [
                     'id' => $product->id,
                     'name' => $product->name,
                     'description' => $product->description,
-                    'price' => $product->price,
+                    'price' => $unitPrice,
                     'quantity' => $item['quantity'],
                     'image' => $product->image,
                     'brand' => $product->brand,
-                    'category' => $product->category
+                    'category' => $product->category,
+                    'decant_ml' => $isDecant ? $decantMl : null,
+                    'is_decant' => $isDecant,
                 ];
             }
 
@@ -156,12 +192,75 @@ class OrderController extends Controller
             $requiresConfirmation = $request->payment_method === 'yape';
             
             // Usar valores del request o determinar automáticamente
-            $source = $request->source ?? (in_array($request->payment_method, ['cash', 'card', 'transfer']) ? 'seller' : 'web');
-            $paymentStatus = $request->payment_status ?? (in_array($request->payment_method, ['paypal', 'cash', 'card', 'transfer']) ? 'paid' : 'pending');
+            $source = $request->source ?? (in_array($request->payment_method, ['cash', 'card', 'plin', 'transfer']) ? 'seller' : 'web');
+            $paymentStatus = $request->payment_status ?? (in_array($request->payment_method, ['paypal', 'cash', 'card', 'plin', 'transfer']) ? 'paid' : 'pending');
             $orderStatus = $request->status ?? 'pending';
 
-            // Create order
-            $order = Order::create([
+            $normalizedPaymentBreakdown = collect($request->payment_breakdown ?? [])->map(function ($payment) {
+                return [
+                    'method' => $payment['method'],
+                    'amount' => (float) $payment['amount'],
+                    'reference' => isset($payment['reference']) ? trim((string) $payment['reference']) : null,
+                    'cash_received' => isset($payment['cash_received']) ? (float) $payment['cash_received'] : null,
+                ];
+            })->values()->all();
+
+            if (empty($normalizedPaymentBreakdown)) {
+                if ($request->payment_method === 'mixed') {
+                    $legacyPayments = [];
+                    if ($request->filled('amount_paid_1')) {
+                        $legacyPayments[] = [
+                            'method' => $request->payment_method_1 ?? 'cash',
+                            'amount' => (float) $request->amount_paid_1,
+                            'reference' => null,
+                            'cash_received' => ($request->payment_method_1 ?? 'cash') === 'cash' ? (float) $request->amount_paid_1 : null,
+                        ];
+                    }
+                    if ($request->filled('amount_paid_2') && $request->filled('payment_method_2')) {
+                        $legacyPayments[] = [
+                            'method' => $request->payment_method_2,
+                            'amount' => (float) $request->amount_paid_2,
+                            'reference' => null,
+                            'cash_received' => $request->payment_method_2 === 'cash' ? (float) $request->amount_paid_2 : null,
+                        ];
+                    }
+                    $normalizedPaymentBreakdown = $legacyPayments;
+                } else {
+                    $singleAmount = $request->payment_method === 'cash'
+                        ? (float) ($request->cash_received ?? $request->amount_paid_1 ?? $request->total)
+                        : (float) $request->total;
+                    $normalizedPaymentBreakdown = [[
+                        'method' => $request->payment_method,
+                        'amount' => $singleAmount,
+                        'reference' => null,
+                        'cash_received' => $request->payment_method === 'cash' ? $singleAmount : null,
+                    ]];
+                }
+            }
+
+            $breakdownTotal = collect($normalizedPaymentBreakdown)->sum(fn ($payment) => (float) ($payment['amount'] ?? 0));
+            if ($breakdownTotal + 0.0001 < (float) $request->total) {
+                throw new \Exception('El desglose de pagos no cubre el total de la venta.');
+            }
+
+            foreach ($normalizedPaymentBreakdown as $paymentPart) {
+                if (($paymentPart['method'] ?? null) !== 'cash' && empty($paymentPart['reference'])) {
+                    throw new \Exception('Todos los pagos no efectivos deben incluir referencia de operación.');
+                }
+            }
+
+            $cashReceived = $request->has('cash_received')
+                ? (float) $request->cash_received
+                : collect($normalizedPaymentBreakdown)
+                    ->where('method', 'cash')
+                    ->sum(fn ($payment) => (float) ($payment['cash_received'] ?? $payment['amount'] ?? 0));
+
+            $changeAmount = $request->has('change_amount')
+                ? (float) $request->change_amount
+                : max(0, $breakdownTotal - (float) $request->total);
+
+            // Create order (compatible con esquemas antiguos sin columnas nuevas)
+            $orderData = [
                 'order_number' => $orderNumber,
                 'user_id' => $request->user_id ?? auth('sanctum')->id(),
                 'source' => $source,
@@ -185,13 +284,24 @@ class OrderController extends Controller
                 'shipping_cost_updated_by_admin' => $request->has('shipping_cost'),
                 'total' => $request->total,
                 'payment_method' => $request->payment_method,
+                'payment_breakdown' => $normalizedPaymentBreakdown,
+                'cash_received' => $cashReceived,
+                'change_amount' => $changeAmount,
                 'transaction_id' => $request->transaction_id,
                 'approval_code' => $request->approval_code,
                 'payment_status' => $paymentStatus,
                 'status' => $orderStatus,
                 'notes' => $request->notes,
                 'requires_admin_confirmation' => $requiresConfirmation
-            ]);
+            ];
+
+            $orderData = array_filter(
+                $orderData,
+                fn ($value, $column) => Schema::hasColumn('orders', $column),
+                ARRAY_FILTER_USE_BOTH
+            );
+
+            $order = Order::create($orderData);
 
             // 👤 GUARDAR CLIENTE automáticamente si es venta de vendedor
             if ($source === 'seller' && $order->user_id && $request->customer_name && 
@@ -330,9 +440,17 @@ class OrderController extends Controller
                             // Registrar movimiento (puede fallar sin afectar el balance)
                             try {
                                 // 'mixed' no es un valor ENUM válido → usar null
-                                $pmForMovement = in_array($request->payment_method, ['cash', 'card', 'yape', 'transfer'])
+                                $pmForMovement = in_array($request->payment_method, ['cash', 'card', 'yape', 'plin', 'transfer', 'mixed'])
                                     ? $request->payment_method
                                     : null;
+
+                                $paymentReferenceText = collect($normalizedPaymentBreakdown)
+                                    ->filter(fn ($payment) => !empty($payment['reference']))
+                                    ->map(function ($payment) {
+                                        $method = strtoupper((string) ($payment['method'] ?? ''));
+                                        return trim($method . ': ' . (string) $payment['reference']);
+                                    })
+                                    ->implode(' | ');
 
                                 CashMovement::create([
                                     'cash_session_id'   => $currentSession->id,
@@ -346,6 +464,10 @@ class OrderController extends Controller
                                     'customer_name'     => $request->customer_name,
                                     'customer_document' => $request->customer_document,
                                     'payment_method'    => $pmForMovement,
+                                    'payment_breakdown' => $normalizedPaymentBreakdown,
+                                    'payment_reference' => $paymentReferenceText ?: null,
+                                    'cash_received'     => $cashReceived,
+                                    'change_amount'     => $changeAmount,
                                     'document_type'     => $request->document_type,
                                 ]);
                             } catch (\Exception $movException) {
@@ -452,6 +574,17 @@ class OrderController extends Controller
                 'order' => $order,
                 'billing' => $billingResult,
             ], 201);
+
+        } catch (ValidationException $e) {
+            DB::rollBack();
+
+            $messages = $e->validator ? $e->validator->errors()->all() : ['Error de validación'];
+
+            return response()->json([
+                'success' => false,
+                'message' => $messages[0] ?? 'Error de validación',
+                'errors' => $e->errors(),
+            ], 422);
 
         } catch (\Exception $e) {
             DB::rollBack();
@@ -1119,7 +1252,7 @@ class OrderController extends Controller
         $query = Order::where('user_id', $user->id)
             ->where('source', 'seller')
             ->select(['id', 'order_number', 'customer_name', 'customer_email', 'customer_phone', 'customer_document', 
-                     'total', 'subtotal', 'tax', 'payment_method', 'payment_status', 'status', 'document_type', 
+                     'total', 'subtotal', 'tax', 'payment_method', 'payment_breakdown', 'cash_received', 'change_amount', 'payment_status', 'status', 'document_type', 
                      'items', 'user_id', 'source', 'created_at', 'updated_at'])
             ->orderBy('created_at', 'desc');
 

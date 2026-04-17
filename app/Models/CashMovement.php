@@ -19,11 +19,18 @@ class CashMovement extends Model
         'customer_name',
         'customer_document',
         'payment_method',
+        'payment_breakdown',
+        'payment_reference',
+        'cash_received',
+        'change_amount',
         'document_type'
     ];
 
     protected $casts = [
-        'amount' => 'decimal:2'
+        'amount' => 'decimal:2',
+        'payment_breakdown' => 'array',
+        'cash_received' => 'decimal:2',
+        'change_amount' => 'decimal:2'
     ];
 
     protected $appends = ['user_name'];
